@@ -76,8 +76,6 @@ class feat_bootleneck(nn.Module):
         return out
 
 
-
-
 class feat_classifier(nn.Module):
     def __init__(self, class_num, bottleneck_dim=256, type="linear"):
         super(feat_classifier, self).__init__()

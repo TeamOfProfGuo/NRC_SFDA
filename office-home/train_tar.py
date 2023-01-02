@@ -170,10 +170,7 @@ def train_target(args):
                 'params': netF.bottle.parameters(),
                 'lr': args.lr * 1  #10
             },
-            {
-                'params': netF.bn.parameters(),
-                'lr': args.lr * 1  #10
-            },
+            dict(params=netF.bn.parameters(), lr=args.lr * 1),
             {
                 'params': oldC.parameters(),
                 'lr': args.lr * 1  #10
