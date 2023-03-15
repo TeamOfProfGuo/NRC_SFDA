@@ -32,10 +32,8 @@ def data_load(args):
         tr_txt = txt_src'''
     dsize = len(txt_src)
     tr_size = int(0.9*dsize)
-    # print(dsize, tr_size, dsize - tr_size)
     _, te_txt = torch.utils.data.random_split(txt_src, [tr_size, dsize - tr_size])
     tr_txt = txt_src
-    #te_txt = txt_src
 
     dsets["source_tr"] = ImageList(tr_txt, transform=image_train(), root=os.path.dirname(args.s_dset_path))
     dset_loaders["source_tr"] = DataLoader(dsets["source_tr"], batch_size=train_bs, shuffle=True, num_workers=args.worker, drop_last=False)
@@ -93,7 +91,7 @@ def train_source(args):
         netB.eval()
         netC.eval()
         if args.dset == 'visda-2017':
-            acc_s_te, acc_list = cal_acc(dset_loaders['source_te'], netF, netB, netC, flag=True)
+            acc_s_te, acc_list = cal_acc(dset_loaders['source_te'], netF, netB, netC, flag=True)   # validation set
             log('Task: {}, Iter:{}/{}; Source Eval Accuracy = {:.2f}\n'.format(args.name_src, iter_num, max_iter, acc_s_te) + acc_list + '\n')
 
         if acc_s_te >= acc_init:
@@ -144,7 +142,7 @@ def test_target(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Neighbors')
-    parser.add_argument('--gpu_id', type=str, nargs='?', default='9', help="device id to run")
+    parser.add_argument('--gpu_id', type=str, nargs='?', default='0', help="device id to run")
     parser.add_argument('--s', type=int, default=0, help="source")
     parser.add_argument('--t', type=int, default=1, help="target")
     parser.add_argument('--max_epoch', type=int, default=10, help="max iterations")
@@ -159,7 +157,6 @@ if __name__ == "__main__":
     parser.add_argument('--layer', type=str, default="wn", choices=["linear", "wn"])
     parser.add_argument('--classifier', type=str, default="bn", choices=["ori", "bn"])
     parser.add_argument('--smooth', type=float, default=0.1)
-    parser.add_argument('--output', type=str, default='weight/source/')
     parser.add_argument('--da', type=str, default='uda')
     parser.add_argument('--trte', type=str, default='val', choices=['full', 'val'])
     args = parser.parse_args()
@@ -179,11 +176,11 @@ if __name__ == "__main__":
     random.seed(SEED)
     # torch.backends.cudnn.deterministic = True
 
-    folder = './data/'
-    args.s_dset_path = folder + args.dset + '/' + names[args.s] + '_list.txt'
-    args.test_dset_path = folder + args.dset + '/' + names[args.t] + '_list.txt'
+    folder = '../dataset/'
+    args.s_dset_path = folder + args.dset + '/' + names[args.s] + '/image_list.txt'
+    args.test_dset_path = folder + args.dset + '/' + names[args.t] + '/image_list.txt'
 
-    args.output_dir_src = osp.join('.', 'result', args.dset, args.da, 'source', names[args.s][0].upper())
+    args.output_dir_src = osp.join('.', 'result', args.dset, 'source', names[args.s][0].upper())
     args.name_src = names[args.s][0].upper()
     ensure_path(args.output_dir_src)
     set_log_path(args.output_dir_src)

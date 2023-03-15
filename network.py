@@ -57,7 +57,6 @@ class ResBase(nn.Module):
         return x
 
 
-
 class feat_bootleneck(nn.Module):
     def __init__(self, feature_dim, bottleneck_dim=256, type="ori"):
         super().__init__()

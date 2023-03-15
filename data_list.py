@@ -33,12 +33,13 @@ def l_loader(path):
             return img.convert('L')
 
 class ImageList(Dataset):
-    def __init__(self, image_list, labels=None, root=None, transform=None, target_transform=None, mode='RGB'):
+    def __init__(self, image_list, labels=None, root=None, transform=None, target_transform=None, mode='RGB', ret_idx = False):
         imgs = make_dataset(image_list, labels)
         if len(imgs) == 0:
             raise(RuntimeError("Found 0 images in subfolders of: " + root + "\n"
                                "Supported image extensions are: " + ",".join(IMG_EXTENSIONS)))
         self.root = root
+        self.ret_idx = ret_idx
 
         self.imgs = imgs
         self.transform = transform
@@ -56,35 +57,10 @@ class ImageList(Dataset):
         if self.target_transform is not None:
             target = self.target_transform(target)
 
-        return img, target
-
-    def __len__(self):
-        return len(self.imgs)
-
-class ImageList_idx(Dataset):
-    def __init__(self, image_list, labels=None, transform=None, target_transform=None, mode='RGB'):
-        imgs = make_dataset(image_list, labels)
-        if len(imgs) == 0:
-            raise(RuntimeError("Found 0 images in subfolders of: " + root + "\n"
-                               "Supported image extensions are: " + ",".join(IMG_EXTENSIONS)))
-
-        self.imgs = imgs
-        self.transform = transform
-        self.target_transform = target_transform
-        if mode == 'RGB':
-            self.loader = rgb_loader
-        elif mode == 'L':
-            self.loader = l_loader
-
-    def __getitem__(self, index):
-        path, target = self.imgs[index]
-        img = self.loader(path)
-        if self.transform is not None:
-            img = self.transform(img)
-        if self.target_transform is not None:
-            target = self.target_transform(target)
-
-        return img, target, index
+        if self.ret_idx:
+            return img, target, index
+        else:
+            return img, target
 
     def __len__(self):
         return len(self.imgs)
