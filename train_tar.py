@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
 import network, loss
 from torch.utils.data import DataLoader
-from data_list import ImageList, ImageList_idx
+from data_list import ImageList
 import random, pdb, math, copy
 import torch.nn.functional as F
 from utils import Entropy, op_copy, lr_scheduler, image_train, image_test, cal_acc, print_args
@@ -24,17 +24,16 @@ def data_load(args):
 
     dsize = len(txt_src)
     tr_size = int(0.9*dsize)
-    # print(dsize, tr_size, dsize - tr_size)
     _, te_txt = torch.utils.data.random_split(txt_src, [tr_size, dsize - tr_size])
     tr_txt = txt_src
 
-    dsets["source_tr"] = ImageList(tr_txt, transform=image_train())
+    dsets["source_tr"] = ImageList(tr_txt, transform=image_train(), root=os.path.dirname(args.s_dset_path))
     dset_loaders["source_tr"] = DataLoader(dsets["source_tr"], batch_size=train_bs, shuffle=True, num_workers=args.worker, drop_last=False)
-    dsets["source_te"] = ImageList(te_txt, transform=image_test())
+    dsets["source_te"] = ImageList(te_txt, transform=image_test(), root=os.path.dirname(args.s_dset_path))
     dset_loaders["source_te"] = DataLoader(dsets["source_te"], batch_size=train_bs, shuffle=True, num_workers=args.worker, drop_last=False)
-    dsets["target"] = ImageList_idx(txt_tar, transform=image_train())
+    dsets["target"] = ImageList(txt_tar, transform=image_train(), root=os.path.dirname(args.t_dset_path), ret_idx=True)
     dset_loaders["target"] = DataLoader(dsets["target"], batch_size=train_bs, shuffle=True, num_workers=args.worker, drop_last=False)
-    dsets["test"] = ImageList_idx(txt_test, transform=image_test())
+    dsets["test"] = ImageList(txt_test, transform=image_test(), root=os.path.dirname(args.test_dset_path), ret_idx=True)
     dset_loaders["test"] = DataLoader(dsets["test"], batch_size=train_bs * 3, shuffle=False, num_workers=args.worker, drop_last=False)
 
     return dset_loaders
