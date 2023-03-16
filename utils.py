@@ -119,3 +119,5 @@ def print_args(args):
         s += "{}:{}\n".format(arg, content)
     s += "==========================================\n"
     return s
+
+pad_string = lambda x, l: [i.ljust(j) for i, j in zip(x, l)]
