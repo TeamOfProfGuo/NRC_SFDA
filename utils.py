@@ -3,9 +3,11 @@ import os
 import torch
 import shutil
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 from torchvision import transforms
 from sklearn.metrics import confusion_matrix
+
 
 def Entropy(input_):
     bs = input_.size(0)
@@ -29,7 +31,6 @@ def lr_scheduler(optimizer, iter_num, max_iter, gamma=10, power=0.75):
         param_group['momentum'] = 0.9
         param_group['nesterov'] = True
     return optimizer
-
 
 
 def image_train(resize_size=256, crop_size=224, alexnet=False):

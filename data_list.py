@@ -52,6 +52,7 @@ class ImageList(Dataset):
     def __getitem__(self, index):
         path, target = self.imgs[index]
         img = self.loader(os.path.join(self.root, path))
+
         if self.transform is not None:
             img = self.transform(img)
         if self.target_transform is not None:

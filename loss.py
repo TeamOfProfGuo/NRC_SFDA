@@ -7,7 +7,6 @@ import torch.nn.functional as F
 import pdb
 
 
-
 class CrossEntropyLabelSmooth(nn.Module):
     """Cross entropy loss with label smoothing regularizer.
     Reference:
@@ -36,11 +35,57 @@ class CrossEntropyLabelSmooth(nn.Module):
             1,
             targets.unsqueeze(1).cpu(), 1)
         if self.use_gpu: targets = targets.cuda()
-        targets = (1 -
-                   self.epsilon) * targets + self.epsilon / self.num_classes
+        targets = (1 - self.epsilon) * targets + self.epsilon / self.num_classes
         loss = (-targets * log_probs).sum(dim=1)
         if self.reduction:
             return loss.mean()
         else:
             return loss
         return loss
+
+
+def cross_entropy(soft_targets, pred, reduction = 'none'):
+    if reduction == 'none':
+        return torch.sum(- soft_targets * torch.log(pred), 1)
+    elif reduction == 'mean':
+        return torch.mean(torch.sum(- soft_targets * torch.log(pred), 1))
+
+
+def compute_dist(true_score, pred_score, type='l2'):
+    "Input: score/output from Softmax Layer"
+    if type == 'l2':
+        return torch.norm(true_score - pred_score, dim=-1)
+    elif type == 'ce':
+        return cross_entropy(true_score, pred_score)
+    elif type == 'sce':  # symmetric cross entropy
+        return cross_entropy(true_score, pred_score) + cross_entropy(pred_score, true_score)
+
+
+class SCELoss(torch.nn.Module):
+    def __init__(self, alpha=0.1, beta=1.0):
+        super(SCELoss, self).__init__()
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.alpha = alpha
+        self.beta = beta
+
+    def forward(self, labels, pred):
+        # CCE
+        ce = cross_entropy(labels, pred, reduction='mean')
+
+        # RCE
+        pred = F.softmax(pred, dim=1)
+        pred = torch.clamp(pred, min=1e-7, max=1.0)
+        labels = torch.clamp(labels, min=1e-4, max=1.0)
+        rce = cross_entropy(pred, labels, reduction='mean')
+
+        # Loss
+        loss = self.alpha * ce + self.beta * rce
+        return loss
+
+
+def compute_loss(soft_targets, pred, type='ce'):
+    if type == 'ce':
+        return cross_entropy(soft_targets, pred)
+    elif type == 'sce':
+        loss_criterion = SCELoss()
+        return loss_criterion(soft_targets, pred)

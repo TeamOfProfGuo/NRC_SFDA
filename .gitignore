@@ -3,3 +3,5 @@ result
 *.log
 *.txt
 *.pyc
+*.out
+weight

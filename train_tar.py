@@ -231,8 +231,8 @@ if __name__ == "__main__":
     parser.add_argument('--epsilon', type=float, default=1e-5)
     parser.add_argument('--layer', type=str, default="wn", choices=["linear", "wn"])
     parser.add_argument('--classifier', type=str, default="bn", choices=["ori", "bn"])
-    parser.add_argument('--output', type=str, default='weight/target/')
-    parser.add_argument('--output_src', type=str, default='weight/source/')
+    parser.add_argument('--output', type=str, default='result/')
+    parser.add_argument('--exp_name', type=str, default='NRC')
     parser.add_argument('--tag', type=str, default='selfplus')
     parser.add_argument('--da', type=str, default='uda')
     parser.add_argument('--issave', type=bool, default=True)
@@ -258,24 +258,19 @@ if __name__ == "__main__":
             continue
         args.t = i
 
-        folder = './data/'
-        args.s_dset_path = folder + args.dset + '/' + names[args.s] + '_list.txt'
-        args.t_dset_path = folder + args.dset + '/' + names[args.t] + '_list.txt'
-        args.test_dset_path = folder + args.dset + '/' + names[args.t] + '_list.txt'
+        folder = '../dataset/'
+        args.s_dset_path = folder + args.dset + '/' + names[args.s] + '/image_list.txt'
+        args.t_dset_path = folder + args.dset + '/' + names[args.t] + '/image_list.txt'
+        args.test_dset_path = folder + args.dset + '/' + names[args.t] + '/image_list.txt'
 
-        args.output_dir_src = osp.join(args.output_src, args.da, args.dset, names[args.s][0].upper())
-        args.output_dir = osp.join(
-            args.output, args.da, args.dset,
-            names[args.s][0].upper() + names[args.t][0].upper())
+        args.output_dir_src = osp.join(args.output, args.dset, 'source', names[args.s][0].upper())
+        args.output_dir = osp.join(args.output, args.dset, args.exp_name, names[args.s][0].upper() + names[args.t][0].upper())
         args.name = names[args.s][0].upper() + names[args.t][0].upper()
 
         if not osp.exists(args.output_dir):
-            os.system('mkdir -p ' + args.output_dir)
-        if not osp.exists(args.output_dir):
-            os.mkdir(args.output_dir)
+            os.makedirs(args.output_dir)
 
-        args.out_file = open(
-            osp.join(args.output_dir, 'log_target.txt'), 'w')
+        args.out_file = open(osp.join(args.output_dir, 'log_target.txt'), 'w')
         args.out_file.write(print_args(args) + '\n')
         args.out_file.flush()
         train_target(args)
