@@ -85,7 +85,7 @@ class SCELoss(torch.nn.Module):
 
 def compute_loss(soft_targets, pred, type='ce'):
     if type == 'ce':
-        return cross_entropy(soft_targets, pred)
+        return cross_entropy(soft_targets, pred, reduction='mean')
     elif type == 'sce':
         loss_criterion = SCELoss()
         return loss_criterion(soft_targets, pred)

@@ -213,13 +213,13 @@ def train_target(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Neighbors')
-    parser.add_argument('--gpu_id', type=str, nargs='?', default='9', help="device id to run")
+    parser.add_argument('--gpu_id', type=str, nargs='?', default='0', help="device id to run")
     parser.add_argument('--s', type=int, default=0, help="source")
     parser.add_argument('--t', type=int, default=1, help="target")
     parser.add_argument('--max_epoch', type=int, default=15, help="max iterations")
     parser.add_argument('--interval', type=int, default=15)
     parser.add_argument('--batch_size', type=int, default=64, help="batch_size")
-    parser.add_argument('--worker', type=int, default=4, help="number of workers")
+    parser.add_argument('--worker', type=int, default=2, help="number of workers")
     parser.add_argument('--dset', type=str, default='visda-2017')
     parser.add_argument('--lr', type=float, default=1e-3, help="learning rate")
     parser.add_argument('--net', type=str, default='resnet101')

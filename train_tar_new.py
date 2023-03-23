@@ -94,9 +94,10 @@ def analysis_target(args):
             inputs_tar, label, tar_idx = iter_target.next()
             epoch += 1
             p = min_p + (max_p - min_p)/args.max_epoch * (epoch-1)
+            log('proportion of pseudo label selected {:.2f}'.format(p))
         inputs_w, inputs_s = inputs_tar
         inputs_w, inputs_s = inputs_w.cuda(), inputs_s.cuda()
-        if inputs_tar.size(0) == 1:
+        if inputs_w.size(0) == 1:
             continue
 
         iter_num += 1
@@ -168,7 +169,7 @@ if __name__ == "__main__":
     parser.add_argument('--max_epoch', type=int, default=15, help="max iterations")
     parser.add_argument('--interval', type=int, default=15)
     parser.add_argument('--batch_size', type=int, default=64, help="batch_size")
-    parser.add_argument('--worker', type=int, default=4, help="number of workers")
+    parser.add_argument('--worker', type=int, default=2, help="number of workers")
     parser.add_argument('--dset', type=str, default='visda-2017')
     parser.add_argument('--lr', type=float, default=1e-3, help="learning rate")
     parser.add_argument('--net', type=str, default='resnet101')
@@ -178,10 +179,10 @@ if __name__ == "__main__":
     parser.add_argument('--layer', type=str, default="wn", choices=["linear", "wn"])
     parser.add_argument('--classifier', type=str, default="bn", choices=["ori", "bn"])
     parser.add_argument('--T', type=float, default=0.5, help='Temperature for creating pseudo-label')
-    parser.add_argument('--loss_type', type=str, default='ce', help='Loss function for target domain adaptation')
+    parser.add_argument('--loss_type', type=str, default='sce', help='Loss function for target domain adaptation')
 
-    parser.add_argument('--output', type=str, default='weight/')
-    parser.add_argument('--exp_name', type=str, default='SW_aug')
+    parser.add_argument('--output', type=str, default='result/')
+    parser.add_argument('--exp_name', type=str, default='SW_sce')
     parser.add_argument('--data_trans', type=str, default='SW')
     args = parser.parse_args()
 
