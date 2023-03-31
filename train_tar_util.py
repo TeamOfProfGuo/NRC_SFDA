@@ -57,6 +57,13 @@ def obtain_ncc_label(loader, netF, netB, netC, args, log):
 
     new_acc = np.sum(new_pred == all_label.float().numpy()) / len(all_feat)
     log('Nearest Clustering Centroid Based Accuracy = {:.2f}% -> {:.2f}%'.format(acc * 100, new_acc * 100))
+    
+    matrix = confusion_matrix(all_label, new_pred.float())
+    acc = matrix.diagonal()/matrix.sum(axis=1) * 100
+    new_acc = acc.mean()
+    cls_acc = [str(np.round(i, 2)) for i in acc]
+    cls_acc = ' '.join(cls_acc)
+    log('overall acc {} classwise accuracy {}'.format(new_acc, cls_acc))
 
     return new_pred.astype('int'), pred_score
 
@@ -66,7 +73,12 @@ def bn_adapt(netF, netB, data_loader, runs=10):
     netB.eval()
     n_batch = 0
     mom_pre = 0.1
-    for input in enumerate(data_loader):
+    
+    iter_test = iter(data_loader)
+    for _ in range(len(data_loader)):
+        data = iter_test.next()
+        inputs, label = data[0], data[1]
+    
         mom_new = (mom_pre * 0.95)
         mom_pre = mom_new
         n_batch += 1
@@ -76,11 +88,11 @@ def bn_adapt(netF, netB, data_loader, runs=10):
         for m in netF.modules():
             if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
                 m.train()
-                m.momentum = mom_new + 0.005
+                m.momentum = mom_new + 0.05
         for m in netB.modules():
             if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
                 m.train()
-                m.momentum = mom_new + 0.005
+                m.momentum = mom_new + 0.05
 
-        _ = netB(netF(input.cuda()))
+        _ = netB(netF(inputs.cuda()))
     return netF, netB

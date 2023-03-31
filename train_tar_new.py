@@ -167,7 +167,7 @@ if __name__ == "__main__":
     parser.add_argument('--s', type=int, default=0, help="source")
     parser.add_argument('--t', type=int, default=1, help="target")
     parser.add_argument('--max_epoch', type=int, default=15, help="max iterations")
-    parser.add_argument('--interval', type=int, default=15)
+    parser.add_argument('--interval', type=int, default=150)
     parser.add_argument('--batch_size', type=int, default=64, help="batch_size")
     parser.add_argument('--worker', type=int, default=2, help="number of workers")
     parser.add_argument('--dset', type=str, default='visda-2017')
@@ -182,7 +182,7 @@ if __name__ == "__main__":
     parser.add_argument('--loss_type', type=str, default='sce', help='Loss function for target domain adaptation')
 
     parser.add_argument('--output', type=str, default='result/')
-    parser.add_argument('--exp_name', type=str, default='SW_sce')
+    parser.add_argument('--exp_name', type=str, default='SW_sce1')
     parser.add_argument('--data_trans', type=str, default='SW')
     args = parser.parse_args()
 

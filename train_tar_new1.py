@@ -82,7 +82,7 @@ def analysis_target(args):
 
     # performance of original model
     acc, cls_acc = cal_acc(dset_loaders["target"], netF, netB, netC, flag=True)
-    log("Source model accuracy on target domain {} \n classwise accuracy {} \n".format(acc, [round(e, 3) for e in cls_acc]))
+    log("Source model accuracy on target domain {} \n classwise accuracy {} \n".format(acc, cls_acc))
 
     pred, _ = obtain_ncc_label(dset_loaders["target"], netF, netB, netC, args, log)
 
