@@ -62,6 +62,9 @@ def image_test(resize_size=256, crop_size=224, alexnet=False):
 
 def cal_acc(loader, netF, netB, netC, flag=False):
     start_test = True
+    netF.eval()
+    netB.eval()
+    netC.eval()
     with torch.no_grad():
         iter_test = iter(loader)
         for i in range(len(loader)):

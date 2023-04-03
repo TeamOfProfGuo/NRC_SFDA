@@ -1,12 +1,13 @@
 
 import numpy as np
-import os.path as osp
-from datetime import date
-import argparse, os, random
+import scipy
+import scipy.stats
+import faiss
+from faiss import normalize_L2
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader
+import torch.nn.functional as F
+from sklearn.metrics import confusion_matrix
 from scipy.spatial.distance import cdist
 
 
@@ -42,11 +43,12 @@ def obtain_ncc_label(loader, netF, netB, netC, args, log):
 
     all_feat = all_feat.float().cpu().numpy()  # [B, 257]
     aff = all_output.float().cpu().numpy()     # [B, 12]
+    K = all_output.size(1)
 
-    for _ in range(2):
+    for run in range(2):
         initc = aff.transpose().dot(all_feat)  # [12, B] [B, 257]
         initc = initc / (1e-8 + aff.sum(axis=0)[:,None])
-        cls_count = np.eye(all_output.size(1))[predict].sum(axis=0)
+        cls_count = np.eye(K)[predict].sum(axis=0)
         labelset = np.where(cls_count>args.threshold)[0]
 
         dd = cdist(all_feat, initc[labelset], args.distance)
@@ -55,8 +57,10 @@ def obtain_ncc_label(loader, netF, netB, netC, args, log):
         pred_score = torch.zeros_like(all_output).float()
         pred_score[:, labelset] = nn.Softmax(dim=1)(torch.tensor(dd)).float()
 
-    new_acc = np.sum(new_pred == all_label.float().numpy()) / len(all_feat)
-    log('Nearest Clustering Centroid Based Accuracy = {:.2f}% -> {:.2f}%'.format(acc * 100, new_acc * 100))
+        aff = np.eye(K)[new_pred]            # need to experiment  aff = pred_score
+
+        new_acc = np.sum(new_pred == all_label.float().numpy()) / len(all_feat)
+        log('Nearest Centroid Classifier Accuracy after {} runs = {:.2f}% -> {:.2f}%'.format(run+1, acc * 100, new_acc * 100))
     
     matrix = confusion_matrix(all_label, new_pred.float())
     acc = matrix.diagonal()/matrix.sum(axis=1) * 100
@@ -65,7 +69,7 @@ def obtain_ncc_label(loader, netF, netB, netC, args, log):
     cls_acc = ' '.join(cls_acc)
     log('overall acc {} classwise accuracy {}'.format(new_acc, cls_acc))
 
-    return new_pred.astype('int'), pred_score
+    return new_pred.astype('int'), all_feat, all_label, pred_score
 
 
 def bn_adapt(netF, netB, data_loader, runs=10):
@@ -96,3 +100,55 @@ def bn_adapt(netF, netB, data_loader, runs=10):
 
         _ = netB(netF(inputs.cuda()))
     return netF, netB
+
+
+def update_plabels(pred_label, feat, args, log, alpha=0.99, max_iter=20):
+
+    log('======= Updating pseudo-labels =======')
+    pred_label = np.asarray(pred_label)
+
+    # kNN search for the graph
+    N, d = feat.shape[0], feat.shape[1]
+    res = faiss.StandardGpuResources()
+    flat_config = faiss.GpuIndexFlatConfig()
+    flat_config.device = int(torch.cuda.device_count()) - 1
+    index = faiss.GpuIndexFlatIP(res, d, flat_config)  # build the index
+
+    normalize_L2(feat)
+    index.add(feat)
+    log('n total {}'.format(index.ntotal))
+    D, I = index.search(feat, args.k + 1)
+
+    # Create the graph
+    D = D[:, 1:] ** 3  # [N, k]
+    I = I[:, 1:]
+    row_idx = np.arange(N)
+    row_idx_rep = np.tile(row_idx, (args.k, 1)).T
+    W = scipy.sparse.csr_matrix((D.flatten('F'), (row_idx_rep.flatten('F'), I.flatten('F'))), shape=(N, N))
+    W = W + W.T
+
+    # Normalize the graph
+    W = W - scipy.sparse.diags(W.diagonal())
+    S = W.sum(axis=1)
+    S[S == 0] = 1
+    D = np.array(1. / np.sqrt(S))
+    D = scipy.sparse.diags(D.reshape(-1))
+    Wn = D * W * D
+
+    # Initiliaze the y vector for each class (eq 5 from the paper, normalized with the class size) and apply label propagation
+    Z = np.zeros((N, len(args.class_num)))
+    A = scipy.sparse.eye(Wn.shape[0]) - alpha * Wn
+    for i in range(len(args.class_num)):
+        cur_idx = np.where(pred_label==i)[0]
+        y = np.zeros((N,))
+        y[cur_idx] = 1.0 / cur_idx.shape[0]
+        f, _ = scipy.sparse.linalg.cg(A, y, tol=1e-6, maxiter=max_iter)
+        Z[:, i] = f
+
+    # Handle numberical errors
+    Z[Z < 0] = 0
+
+    # Compute the weight for each instance based on the entropy (eq 11 from the paper)
+    probs_l1 = F.normalize(torch.tensor(Z), p=1, dim=1).numpy()
+    probs_l1[probs_l1 < 0] = 0
+    return probs_l1

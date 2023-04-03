@@ -5,12 +5,16 @@ import os.path as osp
 from datetime import date
 import argparse, os, random
 import torch
-import torch.nn as nn
+import scipy
+import scipy.stats
+import faiss
+from faiss import normalize_L2
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
 import network
 from data_list import ImageList
-from train_tar_util import obtain_ncc_label, bn_adapt
+from train_tar_util import obtain_ncc_label, bn_adapt, update_plabels
 from loss import compute_dist, compute_loss
 from dataset.data_transform import TransformSW
 from utils import op_copy, lr_scheduler, image_train, image_test, cal_acc, print_args, log, set_log_path, pad_string
@@ -84,13 +88,17 @@ def analysis_target(args):
     acc, cls_acc = cal_acc(dset_loaders["target"], netF, netB, netC, flag=True)
     log("Source model accuracy on target domain {} \n classwise accuracy {} \n".format(acc, cls_acc))
 
-    pred, _ = obtain_ncc_label(dset_loaders["target"], netF, netB, netC, args, log)
-
     log("Adapt Batch Norm parameters")
     netF, netB = bn_adapt(netF, netB, dset_loaders["target"], runs=1000)
 
-    pred, _ = obtain_ncc_label(dset_loaders["target"], netF, netB, netC, args, log)
+    pred_label, feat, label, _ = obtain_ncc_label(dset_loaders["target"], netF, netB, netC, args, log)
 
+    for k_value in np.range(3, 11):
+        args.k = k_value
+        pred_score = update_plabels(pred_label, feat, args, log, alpha=0.99, max_iter=20)
+        new_pred = np.argmax(pred_score, 1)
+        new_acc = np.sum(new_pred == label) / len(label)
+        log('accuracy after label propagation with k={} is {:.4f}'.format(k_value, new_acc))
 
 
 if __name__ == "__main__":
@@ -116,8 +124,10 @@ if __name__ == "__main__":
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')
 
+    parser.add_argument('--k', type=int, default=10, help='number of neighbors for label propagation')
+
     parser.add_argument('--output', type=str, default='result/')
-    parser.add_argument('--exp_name', type=str, default='Clust_BN')
+    parser.add_argument('--exp_name', type=str, default='Clust_LB')
     parser.add_argument('--data_trans', type=str, default='W')
     args = parser.parse_args()
 
