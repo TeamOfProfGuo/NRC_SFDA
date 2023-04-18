@@ -1,5 +1,5 @@
 # encoding:utf-8
-
+import pdb
 import numpy as np
 import os.path as osp
 from datetime import date
@@ -93,11 +93,11 @@ def analysis_target(args):
 
     pred_label, feat, label, _ = obtain_ncc_label(dset_loaders["target"], netF, netB, netC, args, log)
 
-    for k_value in np.range(3, 11):
+    for k_value in range(3, 11):
         args.k = k_value
         pred_score = update_plabels(pred_label, feat, args, log, alpha=0.99, max_iter=20)
         new_pred = np.argmax(pred_score, 1)
-        new_acc = np.sum(new_pred == label) / len(label)
+        new_acc = np.sum(new_pred == label.numpy()) / len(label)
         log('accuracy after label propagation with k={} is {:.4f}'.format(k_value, new_acc))
 
 

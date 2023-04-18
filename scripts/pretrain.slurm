@@ -20,5 +20,5 @@ singularity exec --nv \
 --overlay ${ext3_path}:ro \
 ${sif_path} /bin/bash -c "
 source /ext3/env.sh
-python train_src.py
+python train_tar_new1.py
 "

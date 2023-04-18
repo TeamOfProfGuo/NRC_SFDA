@@ -1,4 +1,5 @@
 
+import pdb
 import numpy as np
 import scipy
 import scipy.stats
@@ -45,7 +46,7 @@ def obtain_ncc_label(loader, netF, netB, netC, args, log):
     aff = all_output.float().cpu().numpy()     # [B, 12]
     K = all_output.size(1)
 
-    for run in range(2):
+    for run in range(1):
         initc = aff.transpose().dot(all_feat)  # [12, B] [B, 257]
         initc = initc / (1e-8 + aff.sum(axis=0)[:,None])
         cls_count = np.eye(K)[predict].sum(axis=0)
@@ -62,7 +63,7 @@ def obtain_ncc_label(loader, netF, netB, netC, args, log):
         new_acc = np.sum(new_pred == all_label.float().numpy()) / len(all_feat)
         log('Nearest Centroid Classifier Accuracy after {} runs = {:.2f}% -> {:.2f}%'.format(run+1, acc * 100, new_acc * 100))
     
-    matrix = confusion_matrix(all_label, new_pred.float())
+    matrix = confusion_matrix(all_label, new_pred)
     acc = matrix.diagonal()/matrix.sum(axis=1) * 100
     new_acc = acc.mean()
     cls_acc = [str(np.round(i, 2)) for i in acc]
@@ -136,9 +137,9 @@ def update_plabels(pred_label, feat, args, log, alpha=0.99, max_iter=20):
     Wn = D * W * D
 
     # Initiliaze the y vector for each class (eq 5 from the paper, normalized with the class size) and apply label propagation
-    Z = np.zeros((N, len(args.class_num)))
+    Z = np.zeros((N, args.class_num))
     A = scipy.sparse.eye(Wn.shape[0]) - alpha * Wn
-    for i in range(len(args.class_num)):
+    for i in range(args.class_num):
         cur_idx = np.where(pred_label==i)[0]
         y = np.zeros((N,))
         y[cur_idx] = 1.0 / cur_idx.shape[0]
