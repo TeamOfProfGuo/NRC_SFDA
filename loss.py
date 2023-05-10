@@ -44,7 +44,7 @@ class CrossEntropyLabelSmooth(nn.Module):
         return loss
 
 
-def cross_entropy(soft_targets, pred, reduction = 'none'):
+def cross_entropy(soft_targets, pred, reduction='none'):
     if reduction == 'none':
         return torch.sum(- soft_targets * torch.log(pred), 1)
     elif reduction == 'mean':
@@ -68,24 +68,37 @@ class SCELoss(torch.nn.Module):
         self.alpha = alpha
         self.beta = beta
 
-    def forward(self, labels, pred):
+    def forward(self, labels, pred, reduction='mean'):
         # CCE
-        ce = cross_entropy(labels, pred, reduction='mean')
+        ce = cross_entropy(labels, pred, reduction=reduction)
 
         # RCE
         pred = F.softmax(pred, dim=1)
         pred = torch.clamp(pred, min=1e-7, max=1.0)
         labels = torch.clamp(labels, min=1e-4, max=1.0)
-        rce = cross_entropy(pred, labels, reduction='mean')
+        rce = cross_entropy(pred, labels, reduction=reduction)
 
         # Loss
         loss = self.alpha * ce + self.beta * rce
         return loss
 
 
-def compute_loss(soft_targets, pred, type='ce'):
+def compute_loss(targets, pred, type='ce', reduction='mean', weight=None):
+    batch_size, num_cls = pred.size()
+    if targets.ndim < 2:
+        ones = torch.eye(num_cls, device=pred.device)
+        soft_targets = torch.index_select(ones, dim=0, index=targets)
+    else:
+        soft_targets = targets
+
     if type == 'ce':
-        return cross_entropy(soft_targets, pred, reduction='mean')
+        loss = cross_entropy(soft_targets, pred, reduction=reduction)
     elif type == 'sce':
         loss_criterion = SCELoss()
-        return loss_criterion(soft_targets, pred)
+        loss = loss_criterion(soft_targets, pred, reduction=reduction)
+
+    if weight is not None:
+        loss = loss * weight
+        loss = loss.sum() / batch_size
+
+    return loss

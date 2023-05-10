@@ -12,65 +12,98 @@ from sklearn.metrics import confusion_matrix
 from scipy.spatial.distance import cdist
 
 
+def extract_features(loader, netF, netB, netC, args, log, isMT = False):
+    netF.eval()
+    netB.eval()
+    netC.eval()
+
+    all_feats, all_labels, all_probs = [], [], []
+    with torch.no_grad():
+        for i, batch_data in enumerate(loader):
+            inputs, labels = batch_data[0], batch_data[1]
+            if torch.cuda.is_available():
+                inputs = inputs.cuda()
+
+            feats = netB(netF(inputs))
+            logits = netC(feats)
+            probs = nn.Softmax(dim=1)(logits)
+
+            all_feats.append(feats.float().cpu())
+            all_probs.append(probs.float().cpu())
+            all_labels.append(labels)
+
+    all_feats = torch.cat(all_feats, dim=0)
+    if args.distance == 'cosine':
+        all_feats = torch.cat((all_feats, torch.ones(all_feats.shape[0], 1)), dim=1)
+        all_feats = all_feats / torch.norm(all_feats, p=2, dim=1, keepdim=True)
+
+    all_feats = all_feats.numpy()
+    all_probs = torch.cat(all_probs, dim=0).numpy()
+    all_labels = torch.cat(all_labels, dim=0).numpy()
+    all_preds = np.argmax(all_probs, axis=1)
+    acc = float(np.sum(all_preds == all_labels)) / float(all_labels.shape[0])
+    log("Accuracy while extracting features {:.2f}".format(acc*100))
+
+    return all_preds, all_feats, all_labels, all_probs
+
+
 def obtain_ncc_label(loader, netF, netB, netC, args, log):
     """ prediction from Nearest Centroid Classifier """
-    start_test = True
-    with torch.no_grad():
-        iter_test = iter(loader)
-        for _ in range(len(loader)):
-            data = iter_test.next()
-            input, label = data[0], data[1]
-            feat = netB(netF(input.cuda()))
-            output = netC(feat)
-            if start_test:
-                all_feat = feat.float().cpu()
-                all_output = output.float().cpu()
-                all_label = label.float()
-                start_test = False
-            else:
-                all_feat = torch.cat((all_feat, feat.float().cpu()), 0)
-                all_output = torch.cat((all_output, output.float().cpu()), 0)
-                all_label = torch.cat((all_label, label.float()), 0)
 
-    all_output = nn.Softmax(dim=1)(all_output)
+    all_feats, all_labels, all_probs = [], [], []
+    with torch.no_grad():
+        for i, batch_data in enumerate(loader):
+            inputs, labels = batch_data[0], batch_data[1]
+            if torch.cuda.is_available():
+                inputs = inputs.cuda()
+
+            feats = netB(netF(inputs))
+            logits = netC(feats)
+            probs = nn.Softmax(dim=1)(logits)
+
+            all_feats.append(feats.float().cpu())
+            all_probs.append(probs.float().cpu())
+            all_labels.append(labels)
+
+    all_feats = torch.cat(all_feats, dim=0)
+    if args.distance == 'cosine':
+        all_feats = torch.cat((all_feats, torch.ones(all_feats.shape[0], 1)), dim=1)
+        all_feats = all_feats / torch.norm(all_feats, p=2, dim=1, keepdim=True)
+
+    all_feats = all_feats.numpy()
+    all_probs = torch.cat(all_probs, dim=0).numpy()
+    all_labels = torch.cat(all_labels, dim=0).numpy()
+    all_preds = np.argmax(all_probs, axis=1)
+    acc = float(np.sum(all_preds == all_labels)) / float(all_labels.shape[0])
     #ent = torch.sum(-all_output * torch.log(all_output + args.epsilon), dim=1)
     #unknown_weight = 1 - ent / np.log(args.class_num)
-    _, predict = torch.max(all_output, 1)
 
-    acc = torch.sum(torch.squeeze(predict).float() == all_label).item() / float(all_label.size()[0])
-    if args.distance == 'cosine':
-        all_feat = torch.cat((all_feat, torch.ones(all_feat.size(0), 1)), 1)
-        all_feat = (all_feat.t() / torch.norm(all_feat, p=2, dim=1)).t()
-
-    all_feat = all_feat.float().cpu().numpy()  # [B, 257]
-    aff = all_output.float().cpu().numpy()     # [B, 12]
-    K = all_output.size(1)
-
+    aff = all_probs
+    K = all_probs.shape[1]
     for run in range(1):
-        initc = aff.transpose().dot(all_feat)  # [12, B] [B, 257]
-        initc = initc / (1e-8 + aff.sum(axis=0)[:,None])
-        cls_count = np.eye(K)[predict].sum(axis=0)
-        labelset = np.where(cls_count>args.threshold)[0]
+        initc = aff.transpose().dot(all_feats)  # [12, B] [B, 257]
+        initc = initc / (1e-8 + aff.sum(axis=0)[:, None])
+        cls_count = np.eye(K)[all_preds].sum(axis=0)
+        labelset = np.where(cls_count >= args.threshold)[0]
 
-        dd = cdist(all_feat, initc[labelset], args.distance)
-        pred_label = dd.argmin(axis=1)
-        new_pred = labelset[pred_label]
-        pred_score = torch.zeros_like(all_output).float()
-        pred_score[:, labelset] = nn.Softmax(dim=1)(torch.tensor(dd)).float()
+        feat_centroid_dist = cdist(all_feats, initc[labelset], args.distance)
+        new_preds = np.argmin(feat_centroid_dist, axis=1)
+        new_preds = labelset[new_preds]
+        new_probs = torch.zeros(all_probs.shape).float()
+        new_probs[:, labelset] = nn.Softmax(dim=1)(torch.tensor(feat_centroid_dist)).float()
+        new_probs = new_probs.cpu().numpy()
 
-        aff = np.eye(K)[new_pred]            # need to experiment  aff = pred_score
-
-        new_acc = np.sum(new_pred == all_label.float().numpy()) / len(all_feat)
+        new_acc = float(np.sum(new_preds == all_labels)) / len(all_labels)
         log('Nearest Centroid Classifier Accuracy after {} runs = {:.2f}% -> {:.2f}%'.format(run+1, acc * 100, new_acc * 100))
+        # aff = np.eye(K)[new_preds]  aff=new_probs
     
-    matrix = confusion_matrix(all_label, new_pred)
-    acc = matrix.diagonal()/matrix.sum(axis=1) * 100
-    new_acc = acc.mean()
-    cls_acc = [str(np.round(i, 2)) for i in acc]
+    matrix = confusion_matrix(all_labels, new_preds)
+    cls_acc = matrix.diagonal()/(matrix.sum(axis=1) + 1e-10)* 100
+    cls_acc = [str(np.round(i, 2)) for i in cls_acc]
     cls_acc = ' '.join(cls_acc)
-    log('overall acc {} classwise accuracy {}'.format(new_acc, cls_acc))
+    log('overall average acc {} classwise accuracy {}'.format(new_acc, cls_acc))
 
-    return new_pred.astype('int'), all_feat, all_label, pred_score
+    return new_preds, all_feats, all_labels, new_probs
 
 
 def bn_adapt(netF, netB, data_loader, runs=10):
@@ -103,10 +136,20 @@ def bn_adapt(netF, netB, data_loader, runs=10):
     return netF, netB
 
 
-def update_plabels(pred_label, feat, args, log, alpha=0.99, max_iter=20):
+def label_propagation(pred_label, feat, label, args, log, alpha=0.99, max_iter=20):
+    """
+    Args:
+        pred_label: current predicted label
+        feat: feature embedding for all samples (used for computing similarity)
+        label: GT label
 
+        alpha:
+        max_iter:
+
+    Returns:
+
+    """
     log('======= Updating pseudo-labels =======')
-    pred_label = np.asarray(pred_label)
 
     # kNN search for the graph
     N, d = feat.shape[0], feat.shape[1]
@@ -152,4 +195,8 @@ def update_plabels(pred_label, feat, args, log, alpha=0.99, max_iter=20):
     # Compute the weight for each instance based on the entropy (eq 11 from the paper)
     probs_l1 = F.normalize(torch.tensor(Z), p=1, dim=1).numpy()
     probs_l1[probs_l1 < 0] = 0
-    return probs_l1
+
+    new_pred = np.argmax(probs_l1, 1)
+    new_acc = float(np.sum(new_pred == label.numpy())) / len(label)
+    log('accuracy after label propagation with k={} is {:.4f}'.format(args.k, new_acc))
+    return new_pred, probs_l1
