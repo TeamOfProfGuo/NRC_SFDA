@@ -82,16 +82,16 @@ def analysis_target(args):
     netC.load_state_dict(torch.load(modelpath))
 
     # performance of original model
-    acc_tar, cls_acc = cal_acc(dset_loaders["target"], netF, netB, netC, flag=True)
-    log("Source model accuracy on target domain {} \n classwise accuracy {} \n".format(acc_tar, cls_acc))
+    mean_acc, classwise_acc, acc = cal_acc(dset_loaders["target"], netF, netB, netC, flag=True)
+    log("Source model accuracy on target domain: {:.2f}%".format(mean_acc*100) + '\nClasswise accuracy: {}'.format(classwise_acc))
 
-    MAX_TEXT_ACC = acc_tar
+    MAX_TEXT_ACC = mean_acc
     if args.bn_adapt: 
         log("Adapt Batch Norm parameters")
         netF, netB = bn_adapt(netF, netB, dset_loaders["target"], runs=1000)
 
     for epoch in range(1, args.max_epoch+1):
-        log('==>epoch {}'.format(epoch))
+        log('==> Start epoch {}'.format(epoch))
         if args.use_ncc:
             pred_labels, feats, labels, pred_probs = obtain_ncc_label(dset_loaders["test"], netF, netB, netC, args, log)
         else:
@@ -160,10 +160,10 @@ def finetune_model(netF, netB, netC, dset_loaders):
     netB.eval()
     netC.eval()
     if args.dset == 'visda-2017':
-        acc_tar, acc_list = cal_acc(dset_loaders['test'], netF, netB, netC, flag=True)
-        log('Task: {}; Accuracy on target = {:.2f}%'.format(args.name, acc_tar) + '\n' + 'T: ' + acc_list)
+        mean_acc, classwise_acc, acc = cal_acc(dset_loaders['test'], netF, netB, netC, flag=True)
+        log('After fine-tuning, Acc: {:.2f}%, Mean Acc: {:.2f}%,'.format(acc, mean_acc) + '\n' + 'T: ' + classwise_acc)
 
-    return acc_tar
+    return mean_acc
 
 
 

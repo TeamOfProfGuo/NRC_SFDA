@@ -12,6 +12,22 @@ from sklearn.metrics import confusion_matrix
 from scipy.spatial.distance import cdist
 
 
+def compute_acc(labels, preds):
+    """
+    Args:
+        labels:  n-d array
+        preds:  n-d array
+
+    Returns:
+
+    """
+    matrix = confusion_matrix(labels, preds)
+    classwise_acc = matrix.diagonal() / matrix.sum(axis=1) * 100
+    acc = classwise_acc.mean()
+    classwise_acc = [str(np.round(i, 2)) for i in acc]
+    classwise_acc = ' '.join(classwise_acc)
+    return acc, classwise_acc
+
 def extract_features(loader, netF, netB, netC, args, log, isMT = False):
     netF.eval()
     netB.eval()
@@ -42,7 +58,8 @@ def extract_features(loader, netF, netB, netC, args, log, isMT = False):
     all_labels = torch.cat(all_labels, dim=0).numpy()
     all_preds = np.argmax(all_probs, axis=1)
     acc = float(np.sum(all_preds == all_labels)) / float(all_labels.shape[0])
-    log("Accuracy while extracting features {:.2f}".format(acc*100))
+    mean_acc, _ = compute_acc(all_labels, all_preds)
+    log("While extracting features Acc: {:.2f}% Mean Acc: {:.2f}%".format(acc*100, mean_acc*100))
 
     return all_preds, all_feats, all_labels, all_probs
 
@@ -149,7 +166,6 @@ def label_propagation(pred_label, feat, label, args, log, alpha=0.99, max_iter=2
     Returns:
 
     """
-    log('======= Updating pseudo-labels =======')
 
     # kNN search for the graph
     N, d = feat.shape[0], feat.shape[1]
@@ -160,7 +176,7 @@ def label_propagation(pred_label, feat, label, args, log, alpha=0.99, max_iter=2
 
     normalize_L2(feat)
     index.add(feat)
-    log('n total {}'.format(index.ntotal))
+    # log('n total {}'.format(index.ntotal))
     D, I = index.search(feat, args.k + 1)
 
     # Create the graph
@@ -198,5 +214,6 @@ def label_propagation(pred_label, feat, label, args, log, alpha=0.99, max_iter=2
 
     new_pred = np.argmax(probs_l1, 1)
     new_acc = float(np.sum(new_pred == label)) / len(label)
-    log('accuracy after label propagation with k={} is {:.4f}'.format(args.k, new_acc))
+    mean_acc, _ = compute_acc(label, new_pred)
+    log('After label propagation with k={}, Acc: {:.2f}%, Mean Acc: {:.2f}%'.format(args.k, new_acc*100, mean_acc*100))
     return new_pred, probs_l1
