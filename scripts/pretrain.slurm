@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --job-name=pre_visda
+#SBATCH --job-name=LP_BN
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2

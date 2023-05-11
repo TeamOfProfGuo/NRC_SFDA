@@ -197,6 +197,6 @@ def label_propagation(pred_label, feat, label, args, log, alpha=0.99, max_iter=2
     probs_l1[probs_l1 < 0] = 0
 
     new_pred = np.argmax(probs_l1, 1)
-    new_acc = float(np.sum(new_pred == label.numpy())) / len(label)
+    new_acc = float(np.sum(new_pred == label)) / len(label)
     log('accuracy after label propagation with k={} is {:.4f}'.format(args.k, new_acc))
     return new_pred, probs_l1

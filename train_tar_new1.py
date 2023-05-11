@@ -86,9 +86,13 @@ def analysis_target(args):
     log("Source model accuracy on target domain {} \n classwise accuracy {} \n".format(acc_tar, cls_acc))
 
     MAX_TEXT_ACC = acc_tar
+    if args.bn_adapt: 
+        log("Adapt Batch Norm parameters")
+        netF, netB = bn_adapt(netF, netB, dset_loaders["target"], runs=1000)
 
     for epoch in range(1, args.max_epoch+1):
-        if args.ncc:
+        log('==>epoch {}'.format(epoch))
+        if args.use_ncc:
             pred_labels, feats, labels, pred_probs = obtain_ncc_label(dset_loaders["test"], netF, netB, netC, args, log)
         else:
             pred_labels, feats, labels, pred_probs = extract_features(dset_loaders["test"], netF, netB, netC, args, log)
@@ -152,14 +156,14 @@ def finetune_model(netF, netB, netC, dset_loaders):
 
         # how about LR
 
-        netF.eval()
-        netB.eval()
-        netC.eval()
-        if args.dset == 'visda-2017':
-            acc_tar, acc_list = cal_acc(dset_loaders['test'], netF, netB, netC, flag=True)
-            log('Task: {}; Accuracy on target = {:.2f}%'.format(args.name, acc_tar) + '\n' + 'T: ' + acc_list)
+    netF.eval()
+    netB.eval()
+    netC.eval()
+    if args.dset == 'visda-2017':
+        acc_tar, acc_list = cal_acc(dset_loaders['test'], netF, netB, netC, flag=True)
+        log('Task: {}; Accuracy on target = {:.2f}%'.format(args.name, acc_tar) + '\n' + 'T: ' + acc_list)
 
-        return acc_tar
+    return acc_tar
 
 
 
@@ -168,7 +172,7 @@ if __name__ == "__main__":
     parser.add_argument('--gpu_id', type=str, nargs='?', default='0', help="device id to run")
     parser.add_argument('--s', type=int, default=0, help="source")
     parser.add_argument('--t', type=int, default=1, help="target")
-    parser.add_argument('--max_epoch', type=int, default=10, help="max iterations")
+    parser.add_argument('--max_epoch', type=int, default=20, help="max iterations")
     parser.add_argument('--interval', type=int, default=2)
     parser.add_argument('--batch_size', type=int, default=64, help="batch_size")
     parser.add_argument('--worker', type=int, default=2, help="number of workers")
@@ -184,6 +188,7 @@ if __name__ == "__main__":
     parser.add_argument('--loss_type', type=str, default='sce', help='Loss function for target domain adaptation')
     parser.add_argument('--loss_wt', action='store_false', help='Whether to use weighted CE/SCE loss')
     parser.add_argument('--use_ncc', action='store_false', help='Whether to apply NCC in the feature extraction process')
+    parser.add_argument('--bn_adapt', action='store_flase', help='Whether to first finetune mu and std in BN layers')
 
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
@@ -192,7 +197,7 @@ if __name__ == "__main__":
     parser.add_argument('--k', type=int, default=5, help='number of neighbors for label propagation')
 
     parser.add_argument('--output', type=str, default='result/')
-    parser.add_argument('--exp_name', type=str, default='Clust_LB')
+    parser.add_argument('--exp_name', type=str, default='LP')
     parser.add_argument('--data_trans', type=str, default='W')
     args = parser.parse_args()
 
