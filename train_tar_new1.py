@@ -188,7 +188,7 @@ if __name__ == "__main__":
     parser.add_argument('--loss_type', type=str, default='sce', help='Loss function for target domain adaptation')
     parser.add_argument('--loss_wt', action='store_false', help='Whether to use weighted CE/SCE loss')
     parser.add_argument('--use_ncc', action='store_false', help='Whether to apply NCC in the feature extraction process')
-    parser.add_argument('--bn_adapt', action='store_flase', help='Whether to first finetune mu and std in BN layers')
+    parser.add_argument('--bn_adapt', action='store_false', help='Whether to first finetune mu and std in BN layers')
 
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
