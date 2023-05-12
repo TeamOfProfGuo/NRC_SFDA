@@ -161,7 +161,7 @@ def finetune_model(netF, netB, netC, dset_loaders):
     netC.eval()
     if args.dset == 'visda-2017':
         mean_acc, classwise_acc, acc = cal_acc(dset_loaders['test'], netF, netB, netC, flag=True)
-        log('After fine-tuning, Acc: {:.2f}%, Mean Acc: {:.2f}%,'.format(acc, mean_acc) + '\n' + 'T: ' + classwise_acc)
+        log('After fine-tuning, Acc: {:.2f}%, Mean Acc: {:.2f}%,'.format(acc*100, mean_acc*100) + '\n' + 'Classwise accuracy: ' + classwise_acc)
 
     return mean_acc
 
@@ -172,7 +172,7 @@ if __name__ == "__main__":
     parser.add_argument('--gpu_id', type=str, nargs='?', default='0', help="device id to run")
     parser.add_argument('--s', type=int, default=0, help="source")
     parser.add_argument('--t', type=int, default=1, help="target")
-    parser.add_argument('--max_epoch', type=int, default=20, help="max iterations")
+    parser.add_argument('--max_epoch', type=int, default=40, help="max iterations")
     parser.add_argument('--interval', type=int, default=2)
     parser.add_argument('--batch_size', type=int, default=64, help="batch_size")
     parser.add_argument('--worker', type=int, default=2, help="number of workers")
@@ -187,7 +187,7 @@ if __name__ == "__main__":
     parser.add_argument('--T', type=float, default=0.5, help='Temperature for creating pseudo-label')
     parser.add_argument('--loss_type', type=str, default='sce', help='Loss function for target domain adaptation')
     parser.add_argument('--loss_wt', action='store_false', help='Whether to use weighted CE/SCE loss')
-    parser.add_argument('--use_ncc', action='store_false', help='Whether to apply NCC in the feature extraction process')
+    parser.add_argument('--use_ncc', action='store_true', help='Whether to apply NCC in the feature extraction process')
     parser.add_argument('--bn_adapt', action='store_false', help='Whether to first finetune mu and std in BN layers')
 
 
@@ -197,7 +197,7 @@ if __name__ == "__main__":
     parser.add_argument('--k', type=int, default=5, help='number of neighbors for label propagation')
 
     parser.add_argument('--output', type=str, default='result/')
-    parser.add_argument('--exp_name', type=str, default='LP')
+    parser.add_argument('--exp_name', type=str, default='LP_BN_NO_NCC')
     parser.add_argument('--data_trans', type=str, default='W')
     args = parser.parse_args()
 

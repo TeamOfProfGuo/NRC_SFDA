@@ -88,13 +88,13 @@ def cal_acc(loader, netF, netB, netC, flag=False):
 
     if flag:
         matrix = confusion_matrix(all_label, torch.squeeze(predict).float())
-        acc = matrix.diagonal()/matrix.sum(axis=1) * 100
+        acc = matrix.diagonal()/matrix.sum(axis=1)
         mean_acc = acc.mean()
-        aa = [str(np.round(i, 2)) for i in acc]
-        acc = ' '.join(aa)
-        return mean_acc, acc, accuracy
+        classwise_acc = [str(np.round(i*100, 2)) for i in acc]
+        classwise_acc = ' '.join(classwise_acc)
+        return mean_acc, classwise_acc, accuracy
     else:
-        return accuracy*100, mean_ent
+        return accuracy, mean_ent
 
 
 

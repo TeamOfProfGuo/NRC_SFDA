@@ -22,9 +22,9 @@ def compute_acc(labels, preds):
 
     """
     matrix = confusion_matrix(labels, preds)
-    classwise_acc = matrix.diagonal() / matrix.sum(axis=1) * 100
+    classwise_acc = matrix.diagonal() / matrix.sum(axis=1)
     acc = classwise_acc.mean()
-    classwise_acc = [str(np.round(i, 2)) for i in acc]
+    classwise_acc = [str(np.round(i, 2)) for i in classwise_acc]
     classwise_acc = ' '.join(classwise_acc)
     return acc, classwise_acc
 
@@ -114,11 +114,8 @@ def obtain_ncc_label(loader, netF, netB, netC, args, log):
         log('Nearest Centroid Classifier Accuracy after {} runs = {:.2f}% -> {:.2f}%'.format(run+1, acc * 100, new_acc * 100))
         # aff = np.eye(K)[new_preds]  aff=new_probs
     
-    matrix = confusion_matrix(all_labels, new_preds)
-    cls_acc = matrix.diagonal()/(matrix.sum(axis=1) + 1e-10)* 100
-    cls_acc = [str(np.round(i, 2)) for i in cls_acc]
-    cls_acc = ' '.join(cls_acc)
-    log('overall average acc {} classwise accuracy {}'.format(new_acc, cls_acc))
+    mean_acc, classwise_acc = compute_acc(all_labels, new_preds)
+    log('After NCC, Acc: {:.2f}%, Mean Acc: {:.2f}%, Classwise accuracy {}'.format(new_acc*100, mean_acc*100, classwise_acc))
 
     return new_preds, all_feats, all_labels, new_probs
 
