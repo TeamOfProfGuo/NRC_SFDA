@@ -169,7 +169,7 @@ def label_propagation(pred_label, feat, label, args, log, alpha=0.99, max_iter=2
     res = faiss.StandardGpuResources()
     flat_config = faiss.GpuIndexFlatConfig()
     flat_config.device = int(torch.cuda.device_count()) - 1
-    index = faiss.GpuIndexFlatIP(res, d, flat_config)  # build the index
+    index = faiss.GpuIndexFlatIP(res, d, flat_config)  # build the index  index = faiss.IndexFlatL2(d)
 
     normalize_L2(feat)
     index.add(feat)

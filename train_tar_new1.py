@@ -116,13 +116,11 @@ def analysis_target(args):
 def finetune_model(netF, netB, netC, dset_loaders):
 
     param_group = [{'params': netF.parameters(), 'lr': args.lr * 0.1},
-                   {'params': netB.parameters(), 'lr': args.lr * 1}]
-    param_group_c = [{'params': netC.parameters(), 'lr': args.lr * 1}]
+                   {'params': netB.parameters(), 'lr': args.lr * 1},
+                   {'params': netC.parameters(), 'lr': args.lr * 1}]
 
-    optimizer = optim.SGD(param_group)
-    optimizer = op_copy(optimizer)
-    optimizer_c = optim.SGD(param_group_c)
-    optimizer_c = op_copy(optimizer_c)
+    optimizer = optim.SGD(param_group, momentum=0.9, weight_decay=1e-3, nesterov=True)
+    scheduler=torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.85)
 
     # ======================== start training / adaptation
     netF.train()
@@ -149,12 +147,13 @@ def finetune_model(netF, netB, netC, dset_loaders):
             loss = compute_loss(plabel, prob_tar, type=args.loss_type)
 
         optimizer.zero_grad()
-        optimizer_c.zero_grad()
         loss.backward()
         optimizer.step()
-        optimizer_c.step()
 
         # how about LR
+        scheduler.step()
+        log('Current lr is netF: {:.6f}, netB: {:.6f}, netC: {:.6f}'.format(
+            optimizer.param_groups[0]['lr'], optimizer.param_groups[1]['lr'], optimizer.param_groups[2]['lr']))
 
     netF.eval()
     netB.eval()
@@ -177,7 +176,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=64, help="batch_size")
     parser.add_argument('--worker', type=int, default=2, help="number of workers")
     parser.add_argument('--dset', type=str, default='visda-2017')
-    parser.add_argument('--lr', type=float, default=1e-3, help="learning rate")
+    parser.add_argument('--lr', type=float, default=0.05, help="learning rate")
     parser.add_argument('--net', type=str, default='resnet101')
     parser.add_argument('--seed', type=int, default=2021, help="random seed")
 
@@ -197,7 +196,7 @@ if __name__ == "__main__":
     parser.add_argument('--k', type=int, default=5, help='number of neighbors for label propagation')
 
     parser.add_argument('--output', type=str, default='result/')
-    parser.add_argument('--exp_name', type=str, default='LP_BN_NO_NCC')
+    parser.add_argument('--exp_name', type=str, default='LP_BN_LR')
     parser.add_argument('--data_trans', type=str, default='W')
     args = parser.parse_args()
 
