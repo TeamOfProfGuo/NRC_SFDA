@@ -32,6 +32,7 @@ def extract_features(loader, netF, netB, netC, args, log, isMT = False):
     netF.eval()
     netB.eval()
     netC.eval()
+    temperature = args.lp_type
 
     all_feats, all_labels, all_probs = [], [], []
     with torch.no_grad():
@@ -42,6 +43,7 @@ def extract_features(loader, netF, netB, netC, args, log, isMT = False):
 
             feats = netB(netF(inputs))
             logits = netC(feats)
+            logits = logits/temperature
             probs = nn.Softmax(dim=1)(logits)
 
             all_feats.append(feats.float().cpu())
@@ -150,7 +152,7 @@ def bn_adapt(netF, netB, data_loader, runs=10):
     return netF, netB
 
 
-def label_propagation(pred_label, feat, label, args, log, alpha=0.99, max_iter=20):
+def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20):
     """
     Args:
         pred_label: current predicted label
@@ -159,10 +161,8 @@ def label_propagation(pred_label, feat, label, args, log, alpha=0.99, max_iter=2
 
         alpha:
         max_iter:
-
-    Returns:
-
     """
+    pred_label = pred_prob if args.lp_type > 0 else np.argmax(pred_prob, axis=1)
 
     # kNN search for the graph
     N, d = feat.shape[0], feat.shape[1]
@@ -196,9 +196,12 @@ def label_propagation(pred_label, feat, label, args, log, alpha=0.99, max_iter=2
     Z = np.zeros((N, args.class_num))
     A = scipy.sparse.eye(Wn.shape[0]) - alpha * Wn
     for i in range(args.class_num):
-        cur_idx = np.where(pred_label==i)[0]
-        y = np.zeros((N,))
-        y[cur_idx] = 1.0 / cur_idx.shape[0]
+        if args.lp_type == 0:
+            y = np.zeros((N,))
+            cur_idx = np.where(pred_label==i)[0]   # pred_label [N]
+            y[cur_idx] = 1.0 / cur_idx.shape[0]
+        else:
+            y = pred_label[:, i] / np.sum(pred_label[:, i])
         f, _ = scipy.sparse.linalg.cg(A, y, tol=1e-6, maxiter=max_iter)
         Z[:, i] = f
 

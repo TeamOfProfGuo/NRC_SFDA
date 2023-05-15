@@ -81,6 +81,14 @@ def analysis_target(args):
     modelpath = args.output_dir_src + '/source_C.pt'
     netC.load_state_dict(torch.load(modelpath))
 
+    param_group = [{'params': netF.parameters(), 'lr': args.lr * 0.1},
+                   {'params': netB.parameters(), 'lr': args.lr * 1},
+                   {'params': netC.parameters(), 'lr': args.lr * 1}]
+
+    optimizer = optim.SGD(param_group, momentum=0.9, weight_decay=1e-3, nesterov=True)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.85)
+
+
     # performance of original model
     mean_acc, classwise_acc, acc = cal_acc(dset_loaders["target"], netF, netB, netC, flag=True)
     log("Source model accuracy on target domain: {:.2f}%".format(mean_acc*100) + '\nClasswise accuracy: {}'.format(classwise_acc))
@@ -97,10 +105,16 @@ def analysis_target(args):
         else:
             pred_labels, feats, labels, pred_probs = extract_features(dset_loaders["test"], netF, netB, netC, args, log)
 
-        pred_labels, pred_probs = label_propagation(pred_labels, feats, labels, args, log, alpha=0.99, max_iter=20)
+        pred_labels, pred_probs = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20)
         reset_data_load(dset_loaders, pred_probs, args)
 
-        acc_tar = finetune_model(netF, netB, netC, dset_loaders)
+        acc_tar = finetune_one_epoch(netF, netB, netC, dset_loaders, optimizer)
+
+
+        # how about LR
+        scheduler.step()
+        log('Current lr is netF: {:.6f}, netB: {:.6f}, netC: {:.6f}'.format(
+            optimizer.param_groups[0]['lr'], optimizer.param_groups[1]['lr'], optimizer.param_groups[2]['lr']))
 
         if acc_tar > MAX_TEXT_ACC:
             MAX_TEXT_ACC = acc_tar
@@ -113,14 +127,7 @@ def analysis_target(args):
                        osp.join(args.output_dir, "target_C_" + today.strftime("%Y%m%d") + ".pt"))
 
 
-def finetune_model(netF, netB, netC, dset_loaders):
-
-    param_group = [{'params': netF.parameters(), 'lr': args.lr * 0.1},
-                   {'params': netB.parameters(), 'lr': args.lr * 1},
-                   {'params': netC.parameters(), 'lr': args.lr * 1}]
-
-    optimizer = optim.SGD(param_group, momentum=0.9, weight_decay=1e-3, nesterov=True)
-    scheduler=torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.85)
+def finetune_one_epoch(netF, netB, netC, dset_loaders, optimizer):
 
     # ======================== start training / adaptation
     netF.train()
@@ -150,11 +157,6 @@ def finetune_model(netF, netB, netC, dset_loaders):
         loss.backward()
         optimizer.step()
 
-        # how about LR
-        scheduler.step()
-        log('Current lr is netF: {:.6f}, netB: {:.6f}, netC: {:.6f}'.format(
-            optimizer.param_groups[0]['lr'], optimizer.param_groups[1]['lr'], optimizer.param_groups[2]['lr']))
-
     netF.eval()
     netB.eval()
     netC.eval()
@@ -171,7 +173,7 @@ if __name__ == "__main__":
     parser.add_argument('--gpu_id', type=str, nargs='?', default='0', help="device id to run")
     parser.add_argument('--s', type=int, default=0, help="source")
     parser.add_argument('--t', type=int, default=1, help="target")
-    parser.add_argument('--max_epoch', type=int, default=40, help="max iterations")
+    parser.add_argument('--max_epoch', type=int, default=50, help="max iterations")
     parser.add_argument('--interval', type=int, default=2)
     parser.add_argument('--batch_size', type=int, default=64, help="batch_size")
     parser.add_argument('--worker', type=int, default=2, help="number of workers")
@@ -183,11 +185,12 @@ if __name__ == "__main__":
     parser.add_argument('--bottleneck', type=int, default=256)
     parser.add_argument('--layer', type=str, default="wn", choices=["linear", "wn"])
     parser.add_argument('--classifier', type=str, default="bn", choices=["ori", "bn"])
-    parser.add_argument('--T', type=float, default=0.5, help='Temperature for creating pseudo-label')
     parser.add_argument('--loss_type', type=str, default='sce', help='Loss function for target domain adaptation')
     parser.add_argument('--loss_wt', action='store_false', help='Whether to use weighted CE/SCE loss')
     parser.add_argument('--use_ncc', action='store_true', help='Whether to apply NCC in the feature extraction process')
     parser.add_argument('--bn_adapt', action='store_false', help='Whether to first finetune mu and std in BN layers')
+    parser.add_argument('--lp_type', type=float, default=0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
+    parser.add_argument('--T_decay', type=str, default='no', help='Temperature decay for creating pseudo-label', choices=['no'])
 
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
