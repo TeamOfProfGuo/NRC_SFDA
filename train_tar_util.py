@@ -32,7 +32,7 @@ def extract_features(loader, netF, netB, netC, args, log, isMT = False):
     netF.eval()
     netB.eval()
     netC.eval()
-    temperature = args.lp_type
+    temperature = args.lp_type if args.lp_type>0 else 1
 
     all_feats, all_labels, all_probs = [], [], []
     with torch.no_grad():

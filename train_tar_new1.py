@@ -86,7 +86,7 @@ def analysis_target(args):
                    {'params': netC.parameters(), 'lr': args.lr * 1}]
 
     optimizer = optim.SGD(param_group, momentum=0.9, weight_decay=1e-3, nesterov=True)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.85)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.7)
 
 
     # performance of original model
@@ -173,7 +173,7 @@ if __name__ == "__main__":
     parser.add_argument('--gpu_id', type=str, nargs='?', default='0', help="device id to run")
     parser.add_argument('--s', type=int, default=0, help="source")
     parser.add_argument('--t', type=int, default=1, help="target")
-    parser.add_argument('--max_epoch', type=int, default=50, help="max iterations")
+    parser.add_argument('--max_epoch', type=int, default=25, help="max iterations")
     parser.add_argument('--interval', type=int, default=2)
     parser.add_argument('--batch_size', type=int, default=64, help="batch_size")
     parser.add_argument('--worker', type=int, default=2, help="number of workers")
@@ -189,7 +189,7 @@ if __name__ == "__main__":
     parser.add_argument('--loss_wt', action='store_false', help='Whether to use weighted CE/SCE loss')
     parser.add_argument('--use_ncc', action='store_true', help='Whether to apply NCC in the feature extraction process')
     parser.add_argument('--bn_adapt', action='store_false', help='Whether to first finetune mu and std in BN layers')
-    parser.add_argument('--lp_type', type=float, default=0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
+    parser.add_argument('--lp_type', type=float, default=1, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
     parser.add_argument('--T_decay', type=str, default='no', help='Temperature decay for creating pseudo-label', choices=['no'])
 
 
@@ -199,7 +199,7 @@ if __name__ == "__main__":
     parser.add_argument('--k', type=int, default=5, help='number of neighbors for label propagation')
 
     parser.add_argument('--output', type=str, default='result/')
-    parser.add_argument('--exp_name', type=str, default='LP_BN_LR')
+    parser.add_argument('--exp_name', type=str, default='LP_BN_Soft1')
     parser.add_argument('--data_trans', type=str, default='W')
     args = parser.parse_args()
 
