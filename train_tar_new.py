@@ -8,11 +8,11 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-import network
-from data_list import ImageList
-from loss import compute_dist, compute_loss
+from model import network
+from dataset.data_list import ImageList
+from model.loss import compute_dist, compute_loss
 from dataset.data_transform import TransformSW
-from utils import op_copy, lr_scheduler, image_train, image_test, cal_acc, print_args, log, set_log_path, pad_string
+from utils import op_copy, lr_scheduler, image_train, image_test, cal_acc, print_args, log, set_log_path
 
 
 def trim_str(s, l):

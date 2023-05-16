@@ -1,5 +1,4 @@
 # encoding:utf-8
-import pdb
 import numpy as np
 import os.path as osp
 from datetime import date
@@ -9,12 +8,12 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-import network
-from data_list import ImageList
-from train_tar_util import obtain_ncc_label, bn_adapt, label_propagation, extract_features
-from loss import compute_dist, compute_loss
+from model import network
+from dataset.data_list import ImageList
+from model.model_util import obtain_ncc_label, bn_adapt, label_propagation, extract_features
+from model.loss import compute_loss
 from dataset.data_transform import TransformSW
-from utils import op_copy, lr_scheduler, image_train, image_test, cal_acc, print_args, log, set_log_path, pad_string
+from utils import image_train, image_test, cal_acc, print_args, log, set_log_path
 
 
 def trim_str(s, l):
@@ -86,7 +85,7 @@ def analysis_target(args):
                    {'params': netC.parameters(), 'lr': args.lr * 1}]
 
     optimizer = optim.SGD(param_group, momentum=0.9, weight_decay=1e-3, nesterov=True)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.7)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.25)
 
 
     # performance of original model
@@ -103,7 +102,7 @@ def analysis_target(args):
         if args.use_ncc:
             pred_labels, feats, labels, pred_probs = obtain_ncc_label(dset_loaders["test"], netF, netB, netC, args, log)
         else:
-            pred_labels, feats, labels, pred_probs = extract_features(dset_loaders["test"], netF, netB, netC, args, log)
+            pred_labels, feats, labels, pred_probs = extract_features(dset_loaders["test"], netF, netB, netC, args, log, epoch)
 
         pred_labels, pred_probs = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20)
         reset_data_load(dset_loaders, pred_probs, args)
@@ -173,7 +172,7 @@ if __name__ == "__main__":
     parser.add_argument('--gpu_id', type=str, nargs='?', default='0', help="device id to run")
     parser.add_argument('--s', type=int, default=0, help="source")
     parser.add_argument('--t', type=int, default=1, help="target")
-    parser.add_argument('--max_epoch', type=int, default=25, help="max iterations")
+    parser.add_argument('--max_epoch', type=int, default=30, help="max iterations")
     parser.add_argument('--interval', type=int, default=2)
     parser.add_argument('--batch_size', type=int, default=64, help="batch_size")
     parser.add_argument('--worker', type=int, default=2, help="number of workers")
@@ -190,7 +189,7 @@ if __name__ == "__main__":
     parser.add_argument('--use_ncc', action='store_true', help='Whether to apply NCC in the feature extraction process')
     parser.add_argument('--bn_adapt', action='store_false', help='Whether to first finetune mu and std in BN layers')
     parser.add_argument('--lp_type', type=float, default=1, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
-    parser.add_argument('--T_decay', type=str, default='no', help='Temperature decay for creating pseudo-label', choices=['no'])
+    parser.add_argument('--T_decay', type=float, default=0.8, help='Temperature decay for creating pseudo-label')
 
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
@@ -199,7 +198,7 @@ if __name__ == "__main__":
     parser.add_argument('--k', type=int, default=5, help='number of neighbors for label propagation')
 
     parser.add_argument('--output', type=str, default='result/')
-    parser.add_argument('--exp_name', type=str, default='LP_BN_Soft1')
+    parser.add_argument('--exp_name', type=str, default='LP_BN_T1_Decay8')
     parser.add_argument('--data_trans', type=str, default='W')
     args = parser.parse_args()
 

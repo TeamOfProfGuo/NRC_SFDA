@@ -1,22 +1,13 @@
 import argparse
-import os, sys
+import sys
 sys.path.append('./')
 
 import os.path as osp
-import torchvision
-import numpy as np
-import torch
-import torch.nn as nn
 import torch.optim as optim
-from torchvision import transforms
-import network
+from model import network
 from torch.utils.data import DataLoader
-import random, pdb, math, copy
-from tqdm import tqdm
-import pickle
+import random
 from utils import *
-from torch import autograd
-
 
 
 def print_args(args):
@@ -347,32 +338,15 @@ def train_target(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description='Domain Adaptation on office-home dataset')
-    parser.add_argument('--gpu_id',
-                        type=str,
-                        nargs='?',
-                        default='0',
-                        help="device id to run")
+    parser = argparse.ArgumentParser(description='Domain Adaptation on office-home dataset')
+    parser.add_argument('--gpu_id',  type=str, nargs='?', default='0', help="device id to run")
     parser.add_argument('--s', type=int, default=0, help="source")
     parser.add_argument('--t', type=int, default=1, help="target")
-    parser.add_argument('--max_epoch',
-                        type=int,
-                        default=40,
-                        help="maximum epoch") # set to 50 on office-31
-    parser.add_argument('--batch_size',
-                        type=int,
-                        default=64,
-                        help="batch_size")
+    parser.add_argument('--max_epoch', type=int, default=40, help="maximum epoch") # set to 50 on office-31
+    parser.add_argument('--batch_size', type=int, default=64, help="batch_size")
     parser.add_argument('--interval', type=int, default=15)
-    parser.add_argument('--worker',
-                        type=int,
-                        default=4,
-                        help="number of workers")
-    parser.add_argument('--k',
-                        type=int,
-                        default=2,
-                        help="number of neighborhoods")
+    parser.add_argument('--worker', type=int, default=4, help="number of workers")
+    parser.add_argument('--k', type=int, default=2, help="number of neighborhoods")
     parser.add_argument('--dset', type=str, default='a2r')
     parser.add_argument('--choice', type=str, default='shot')
     parser.add_argument('--lr',

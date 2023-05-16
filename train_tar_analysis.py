@@ -7,12 +7,12 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import network, loss
+from model import network
 from torch.utils.data import DataLoader
-from data_list import ImageList
+from dataset.data_list import ImageList
 from dataset.data_transform import TransformSW
 from sklearn.metrics import confusion_matrix
-from utils import Entropy, op_copy, lr_scheduler, image_train, image_test, cal_acc, print_args, log, set_log_path, pad_string
+from utils import Entropy, op_copy, image_train, image_test, print_args, log, set_log_path, pad_string
 
 
 def trim_str(s, l):

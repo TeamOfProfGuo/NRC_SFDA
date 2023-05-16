@@ -28,11 +28,14 @@ def compute_acc(labels, preds):
     classwise_acc = ' '.join(classwise_acc)
     return acc, classwise_acc
 
-def extract_features(loader, netF, netB, netC, args, log, isMT = False):
+def extract_features(loader, netF, netB, netC, args, log, epoch=1, isMT = False):
     netF.eval()
     netB.eval()
     netC.eval()
     temperature = args.lp_type if args.lp_type>0 else 1
+    if args.lp_type > 0:
+        temperature *= args.T_decay ** (epoch-1)
+    log('While extracting features T: {:.5f}'.format(temperature))
 
     all_feats, all_labels, all_probs = [], [], []
     with torch.no_grad():
@@ -215,5 +218,5 @@ def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20
     new_pred = np.argmax(probs_l1, 1)
     new_acc = float(np.sum(new_pred == label)) / len(label)
     mean_acc, _ = compute_acc(label, new_pred)
-    log('After label propagation with k={}, Acc: {:.2f}%, Mean Acc: {:.2f}%'.format(args.k, new_acc*100, mean_acc*100))
+    log('After label propagation Acc: {:.2f}%, Mean Acc: {:.2f}%'.format(args.k, new_acc*100, mean_acc*100))
     return new_pred, probs_l1

@@ -6,12 +6,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import network, loss
+from model import network
 from torch.utils.data import DataLoader
-from data_list import ImageList
-import random, pdb, math, copy
+from dataset.data_list import ImageList
+import random
 import torch.nn.functional as F
-from utils import Entropy, op_copy, lr_scheduler, image_train, image_test, cal_acc, print_args
+from utils import op_copy, lr_scheduler, image_train, image_test, cal_acc, print_args
 
 def data_load(args):
     ## prepare data

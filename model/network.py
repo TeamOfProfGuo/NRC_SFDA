@@ -58,7 +58,7 @@ class ResBase(nn.Module):
 
 
 class feat_bootleneck(nn.Module):
-    def __init__(self, feature_dim, bottleneck_dim=256, type="ori"):
+    def __init__(self, feature_dim, bottleneck_dim=256, type="bn"):
         super().__init__()
         self.bn = nn.BatchNorm1d(bottleneck_dim, affine=True)
         self.relu = nn.ReLU(inplace=True)

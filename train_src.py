@@ -5,12 +5,11 @@ import argparse
 import os.path as osp
 import numpy as np
 import torch.optim as optim
-import network
+from model import network
 from torch.utils.data import DataLoader
-from data_list import ImageList
-from loss import CrossEntropyLabelSmooth
-from utils import Entropy, op_copy, lr_scheduler, image_train, image_test, cal_acc, ensure_path, set_log_path, log, print_args
-
+from dataset.data_list import ImageList
+from model.loss import CrossEntropyLabelSmooth
+from utils import op_copy, lr_scheduler, image_train, image_test, cal_acc, ensure_path, set_log_path, log, print_args
 
 def data_load(args):
     ## prepare data
