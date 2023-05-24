@@ -59,7 +59,8 @@ def analysis_target(args):
         netF, netB = bn_adapt(netF, netB, dset_loaders["target"], runs=1000)
 
     # ========== Define Model with Contrastive Branch ============
-    model = moco.MoCo(netF, netB, netC, dim=128, K=16384, m=0.999, T=0.07, mlp=True)
+    model = moco.MoCo(netF, netB, netC, dim=128, K=4096, m=0.999, T=0.07, mlp=True)
+    model = model.cuda()
 
     param_group = [{'params': model.netF.parameters(), 'lr': args.lr * 0.5},
                    {'params': model.projection_layer.parameters(), 'lr': args.lr * 1},
@@ -124,10 +125,12 @@ def finetune_one_epoch(model, dset_loaders, optimizer):
         else:
             ce_loss = compute_loss(plabel, prob_tar, type=args.loss_type)
 
-        output, target = model.moco_forward(im_q=img_tar[0], im_k=img_tar[1])
-        nce_loss = nn.CrossEntropyLoss()(output, target)
-
-        loss = ce_loss + args.nce_wt * nce_loss
+        if img_tar[0].size(0) == args.batch_size:
+            output, target = model.moco_forward(im_q=img_tar[0], im_k=img_tar[1])
+            nce_loss = nn.CrossEntropyLoss()(output, target)
+            loss = ce_loss + args.nce_wt * nce_loss
+        else:
+            loss = ce_loss
 
         optimizer.zero_grad()
         loss.backward()

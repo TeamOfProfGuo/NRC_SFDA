@@ -7,18 +7,9 @@ from model import network
 from model.loss import CrossEntropyLabelSmooth
 from dataset.oh_data import office_load
 
-
-def print_args(args):
-    s = "==========================================\n"
-    for arg, content in args.__dict__.items():
-        s += "{}:{}\n".format(arg, content)
-    return s
-
-
 def train_source(args, log):
     dset_loaders = office_load(args)
 
-    ## set base network
     ## set base network
     netF = network.ResBase(res_name=args.net).cuda()
     netB = network.feat_bootleneck(type='bn', feature_dim=netF.in_features, bottleneck_dim=args.bottleneck).cuda()
