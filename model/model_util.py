@@ -218,5 +218,5 @@ def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20
     new_pred = np.argmax(probs_l1, 1)
     new_acc = float(np.sum(new_pred == label)) / len(label)
     mean_acc, _ = compute_acc(label, new_pred)
-    log('After label propagation Acc: {:.2f}%, Mean Acc: {:.2f}%'.format(args.k, new_acc*100, mean_acc*100))
+    log('After label propagation Acc: {:.2f}%, Mean Acc: {:.2f}%'.format(new_acc*100, mean_acc*100))
     return new_pred, probs_l1

@@ -2,10 +2,8 @@
 import os
 import torch
 import shutil
-import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
-from torchvision import transforms
+import torch.nn as nn
 from sklearn.metrics import confusion_matrix
 
 
@@ -31,33 +29,6 @@ def lr_scheduler(optimizer, iter_num, max_iter, gamma=10, power=0.75):
         param_group['momentum'] = 0.9
         param_group['nesterov'] = True
     return optimizer
-
-
-def image_train(resize_size=256, crop_size=224, alexnet=False):
-    if not alexnet:
-        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                         std=[0.229, 0.224, 0.225])
-    else:
-        normalize = Normalize(meanfile='./ilsvrc_2012_mean.npy')
-    return transforms.Compose([
-        transforms.Resize((resize_size, resize_size)),
-        transforms.RandomCrop(crop_size),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(), normalize
-    ])
-
-
-def image_test(resize_size=256, crop_size=224, alexnet=False):
-    if not alexnet:
-        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                         std=[0.229, 0.224, 0.225])
-    else:
-        normalize = Normalize(meanfile='./ilsvrc_2012_mean.npy')
-    return transforms.Compose([
-        transforms.Resize((resize_size, resize_size)),
-        transforms.CenterCrop(crop_size),
-        transforms.ToTensor(), normalize
-    ])
 
 
 def cal_acc(loader, netF, netB, netC, flag=False):

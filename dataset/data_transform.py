@@ -1,12 +1,34 @@
 import logging
 import math
-
-import numpy as np
-from PIL import Image
-from torchvision import datasets
+import random
+from PIL import ImageFilter
 from torchvision import transforms
-
 from .randaugment import RandAugmentMC
+
+
+class TwoCropsTransform:
+    """Take two random crops of one image as the query and key."""
+
+    def __init__(self, base_transform0, base_transform1):
+        self.base_transform0 = base_transform0
+        self.base_transform1 = base_transform1
+
+    def __call__(self, x):
+        q = self.base_transform0(x)
+        k = self.base_transform1(x)
+        return [q, k]
+
+
+class GaussianBlur(object):
+    """Gaussian blur augmentation in SimCLR https://arxiv.org/abs/2002.05709"""
+
+    def __init__(self, sigma=[0.1, 2.0]):
+        self.sigma = sigma
+
+    def __call__(self, x):
+        sigma = random.uniform(self.sigma[0], self.sigma[1])
+        x = x.filter(ImageFilter.GaussianBlur(radius=sigma))
+        return x
 
 
 class TransformSW(object):

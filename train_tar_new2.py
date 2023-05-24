@@ -8,9 +8,9 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from model import network
+from model import network, moco
 from dataset.data_list import ImageList
-from dataset.visda_data import data_load, image_train
+from dataset.visda_data import data_load, image_train, moco_transform
 from model.model_util import obtain_ncc_label, bn_adapt, label_propagation, extract_features
 from model.loss import compute_loss
 from dataset.data_transform import TransformSW
@@ -18,18 +18,25 @@ from utils import cal_acc, print_args, log, set_log_path
 mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
 
 
-def reset_data_load(dset_loaders, pred_prob, args):
+def reset_data_load(dset_loaders, pred_prob, args, moco_load=False):
     """
     modify the target data loader to return both image and pseudo label
     """
     txt_tar = open(args.t_dset_path).readlines()
-    data_trans = TransformSW(mean, std, aug_k=1) if args.data_trans == 'SW' else image_train()
-    dsets_target = ImageList(txt_tar, transform=data_trans, root=os.path.dirname(args.t_dset_path), ret_idx=True, pprob=pred_prob, ret_plabel=True, args=args)
-    dset_loaders["target"] = DataLoader(dsets_target, batch_size=args.batch_size, shuffle=True, num_workers=args.worker, drop_last=False)
+    if moco_load:
+        data_trans = moco_transform
+    else:
+        data_trans = TransformSW(mean, std, aug_k=1) if args.data_trans == 'SW' else image_train()
+    dsets = ImageList(txt_tar, transform=data_trans, root=os.path.dirname(args.t_dset_path), ret_idx=True, pprob=pred_prob, ret_plabel=True, args=args)
+    dloader = DataLoader(dsets, batch_size=args.batch_size, shuffle=True, num_workers=args.worker, drop_last=False)
+    if moco_load:
+        dset_loaders['target_moco'] = dloader
+    else:
+        dset_loaders['target'] = dloader
 
 
 def analysis_target(args):
-    dset_loaders = data_load(args)
+    dset_loaders = data_load(args, moco_load=True)
 
     # set base network
     netF = network.ResBase(res_name=args.net).cuda()
@@ -42,34 +49,40 @@ def analysis_target(args):
     modelpath = args.output_dir_src + '/source_C.pt'
     netC.load_state_dict(torch.load(modelpath))
 
-    param_group = [{'params': netF.parameters(), 'lr': args.lr * 0.1},
-                   {'params': netB.parameters(), 'lr': args.lr * 1},
-                   {'params': netC.parameters(), 'lr': args.lr * 1}]
-
-    optimizer = optim.SGD(param_group, momentum=0.9, weight_decay=1e-3, nesterov=True)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.25)
-
-
     # performance of original model
     mean_acc, classwise_acc, acc = cal_acc(dset_loaders["target"], netF, netB, netC, flag=True)
     log("Source model accuracy on target domain: {:.2f}%".format(mean_acc*100) + '\nClasswise accuracy: {}'.format(classwise_acc))
 
     MAX_TEXT_ACC = mean_acc
-    if args.bn_adapt: 
+    if args.bn_adapt:
         log("Adapt Batch Norm parameters")
         netF, netB = bn_adapt(netF, netB, dset_loaders["target"], runs=1000)
 
+    # ========== Define Model with Contrastive Branch ============
+    model = moco.MoCo(netF, netB, netC, dim=128, K=16384, m=0.999, T=0.07, mlp=True)
+
+    param_group = [{'params': model.netF.parameters(), 'lr': args.lr * 0.5},
+                   {'params': model.projection_layer.parameters(), 'lr': args.lr * 1},
+                   {'params': model.netB.parameters(), 'lr': args.lr * 1},
+                   {'params': model.netC.parameters(), 'lr': args.lr * 1}]
+
+    optimizer = optim.SGD(param_group, momentum=0.9, weight_decay=1e-3, nesterov=True)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.25)
+
+    # ======================= start training =======================
     for epoch in range(1, args.max_epoch+1):
         log('==> Start epoch {}'.format(epoch))
         if args.use_ncc:
-            pred_labels, feats, labels, pred_probs = obtain_ncc_label(dset_loaders["test"], netF, netB, netC, args, log)
+            pred_labels, feats, labels, pred_probs = obtain_ncc_label(dset_loaders["test"], model.netF, model.netB, model.netC, args, log)
         else:
-            pred_labels, feats, labels, pred_probs = extract_features(dset_loaders["test"], netF, netB, netC, args, log, epoch)
+            pred_labels, feats, labels, pred_probs = extract_features(dset_loaders["test"], model.netF, model.netB, model.netC, args, log, epoch)
 
         pred_labels, pred_probs = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20)
-        reset_data_load(dset_loaders, pred_probs, args)
 
-        acc_tar = finetune_one_epoch(netF, netB, netC, dset_loaders, optimizer)
+        # modify data loader: (1) add pseudo label to moco data loader
+        reset_data_load(dset_loaders, pred_probs, args, moco_load=True)
+
+        acc_tar = finetune_one_epoch(model, dset_loaders, optimizer)
 
 
         # how about LR
@@ -88,41 +101,41 @@ def analysis_target(args):
                        osp.join(args.output_dir, "target_C_" + today.strftime("%Y%m%d") + ".pt"))
 
 
-def finetune_one_epoch(netF, netB, netC, dset_loaders, optimizer):
+def finetune_one_epoch(model, dset_loaders, optimizer):
 
     # ======================== start training / adaptation
-    netF.train()
-    netB.train()
-    netC.train()
+    model.train()
 
-    for iter_num, batch_data in enumerate(dset_loaders["target"]):
-        input_tar, _, tar_idx, plabel, weight = batch_data
+    for iter_num, batch_data in enumerate(dset_loaders["target_moco"]):
+        img_tar, _, tar_idx, plabel, weight = batch_data
 
-        if input_tar.size(0) == 1:
+        if img_tar[0].size(0) == 1:
             continue
 
-        input_tar = input_tar.cuda()
+        img_tar[0] = img_tar[0].cuda()
+        img_tar[1] = img_tar[1].cuda()
         plabel = plabel.cuda()
         weight = weight.cuda()
 
-        feat_tar = netB(netF(input_tar))
-        logit_tar = netC(feat_tar)
+        logit_tar = model(img_tar[0])
         prob_tar = nn.Softmax(dim=1)(logit_tar)
-
         if args.loss_wt:
-            loss = compute_loss(plabel, prob_tar, type=args.loss_type, weight=weight)
+            ce_loss = compute_loss(plabel, prob_tar, type=args.loss_type, weight=weight)
         else:
-            loss = compute_loss(plabel, prob_tar, type=args.loss_type)
+            ce_loss = compute_loss(plabel, prob_tar, type=args.loss_type)
+
+        output, target = model.moco_forward(im_q=img_tar[0], im_k=img_tar[1])
+        nce_loss = nn.CrossEntropyLoss()(output, target)
+
+        loss = ce_loss + args.nce_wt * nce_loss
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-    netF.eval()
-    netB.eval()
-    netC.eval()
+    model.eval()
     if args.dset == 'visda-2017':
-        mean_acc, classwise_acc, acc = cal_acc(dset_loaders['test'], netF, netB, netC, flag=True)
+        mean_acc, classwise_acc, acc = cal_acc(dset_loaders['test'], model.netF, model.netB, model.netC, flag=True)
         log('After fine-tuning, Acc: {:.2f}%, Mean Acc: {:.2f}%,'.format(acc*100, mean_acc*100) + '\n' + 'Classwise accuracy: ' + classwise_acc)
 
     return mean_acc
@@ -152,7 +165,7 @@ if __name__ == "__main__":
     parser.add_argument('--bn_adapt', action='store_false', help='Whether to first finetune mu and std in BN layers')
     parser.add_argument('--lp_type', type=float, default=0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
     parser.add_argument('--T_decay', type=float, default=0.8, help='Temperature decay for creating pseudo-label')
-
+    parser.add_argument('--nce_wt', type=float, default=1.0, help='weight for nce loss')
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')
@@ -160,7 +173,7 @@ if __name__ == "__main__":
     parser.add_argument('--k', type=int, default=5, help='number of neighbors for label propagation')
 
     parser.add_argument('--output', type=str, default='result/')
-    parser.add_argument('--exp_name', type=str, default='LP_BN_LR')
+    parser.add_argument('--exp_name', type=str, default='moco')
     parser.add_argument('--data_trans', type=str, default='W')
     args = parser.parse_args()
 
