@@ -99,6 +99,6 @@ def compute_loss(targets, pred, type='ce', reduction='mean', weight=None):
 
     if weight is not None:
         loss = loss * weight
-        loss = loss.sum() / batch_size
+    loss = loss.sum() / batch_size
 
     return loss

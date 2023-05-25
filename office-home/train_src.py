@@ -82,7 +82,7 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=2021, help="random seed")
 
     parser.add_argument('--worker', type=int, default=4, help="number of workers")
-    parser.add_argument('--dset', type=str, default='a2c')
+    parser.add_argument('--dset', type=str, default='r2c')
 
     parser.add_argument('--net', type=str, default='resnet101', help="resnet50, resnet101")
     parser.add_argument('--bottleneck', type=int, default=256)
@@ -91,7 +91,7 @@ if __name__ == "__main__":
     parser.add_argument('--class_num', type=int, default=65)
     parser.add_argument('--par', type=float, default=0.1)
     parser.add_argument('--smooth', type=float, default=0.1)
-    parser.add_argument('--home', action='store_true')
+    parser.add_argument('--home', action='store_false')
     args = parser.parse_args()
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id

@@ -168,7 +168,7 @@ if __name__ == "__main__":
     parser.add_argument('--bn_adapt', action='store_false', help='Whether to first finetune mu and std in BN layers')
     parser.add_argument('--lp_type', type=float, default=0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
     parser.add_argument('--T_decay', type=float, default=0.8, help='Temperature decay for creating pseudo-label')
-    parser.add_argument('--nce_wt', type=float, default=1.0, help='weight for nce loss')
+    parser.add_argument('--nce_wt', type=float, default=0.5, help='weight for nce loss')
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')
@@ -176,7 +176,7 @@ if __name__ == "__main__":
     parser.add_argument('--k', type=int, default=5, help='number of neighbors for label propagation')
 
     parser.add_argument('--output', type=str, default='result/')
-    parser.add_argument('--exp_name', type=str, default='moco')
+    parser.add_argument('--exp_name', type=str, default='moco_wt5')
     parser.add_argument('--data_trans', type=str, default='W')
     args = parser.parse_args()
 
