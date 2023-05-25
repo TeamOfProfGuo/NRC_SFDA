@@ -147,20 +147,20 @@ if __name__ == "__main__":
     parser.add_argument('--layer', type=str, default="wn", choices=["linear", "wn"])
     parser.add_argument('--classifier', type=str, default="bn", choices=["ori", "bn"])
     parser.add_argument('--loss_type', type=str, default='sce', help='Loss function for target domain adaptation')
-    parser.add_argument('--loss_wt', action='store_true', help='Whether to use weighted CE/SCE loss')
+    parser.add_argument('--loss_wt', action='store_false', help='Whether to use weighted CE/SCE loss')
     parser.add_argument('--use_ncc', action='store_true', help='Whether to apply NCC in the feature extraction process')
     parser.add_argument('--bn_adapt', action='store_false', help='Whether to first finetune mu and std in BN layers')
     parser.add_argument('--lp_type', type=float, default=0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
     parser.add_argument('--T_decay', type=float, default=0.8, help='Temperature decay for creating pseudo-label')
 
 
-    parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
+    parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'cosine1' 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')
 
     parser.add_argument('--k', type=int, default=5, help='number of neighbors for label propagation')
 
     parser.add_argument('--output', type=str, default='result/')
-    parser.add_argument('--exp_name', type=str, default='LP_NW')
+    parser.add_argument('--exp_name', type=str, default='LP_cosine')
     parser.add_argument('--data_trans', type=str, default='W')
     args = parser.parse_args()
 
