@@ -28,13 +28,13 @@ def compute_acc(labels, preds):
     classwise_acc = ' '.join(classwise_acc)
     return acc, classwise_acc
 
-def extract_features(loader, netF, netB, netC, args, log, epoch=1, isMT = False):
+def extract_features(loader, netF, netB, netC, args, log, epoch=0, isMT = False):
     netF.eval()
     netB.eval()
     netC.eval()
     temperature = args.lp_type if args.lp_type>0 else 1
     if args.lp_type > 0:
-        temperature *= args.T_decay ** (epoch-1)
+        temperature *= args.T_decay ** (epoch-0)
     log('While extracting features T: {:.5f}'.format(temperature))
 
     all_feats, all_labels, all_probs = [], [], []
@@ -54,8 +54,10 @@ def extract_features(loader, netF, netB, netC, args, log, epoch=1, isMT = False)
             all_labels.append(labels)
 
     all_feats = torch.cat(all_feats, dim=0)
-    if args.distance == 'cosine':
+    if args.distance == 'cosine1':
         all_feats = torch.cat((all_feats, torch.ones(all_feats.shape[0], 1)), dim=1)
+        all_feats = all_feats / torch.norm(all_feats, p=2, dim=1, keepdim=True)
+    elif args.distance == 'cosine':
         all_feats = all_feats / torch.norm(all_feats, p=2, dim=1, keepdim=True)
 
     all_feats = all_feats.numpy()

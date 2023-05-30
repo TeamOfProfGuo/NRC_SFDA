@@ -4,7 +4,7 @@ import torch
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from dataset.data_list import ImageList
-from dataset.data_transform import TransformSW, GaussianBlur, TwoCropsTransform
+from dataset.data_transform import TransformSW, GaussianBlur, TwoCropsTransform, DataAugmentationDINO
 
 visda_classes = ['aeroplane', 'bicycle', 'bus', 'car', 'horse' 'knife', 'motorcycle', 'person', 'plant', 'skateboard', 'train', 'truck']
 mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
@@ -65,7 +65,7 @@ moco_transform = TwoCropsTransform(transforms.Compose(moco_base_augmentation0),
                                    transforms.Compose(moco_base_augmentation1))
 
 
-def data_load(args, moco_load=False):
+def data_load(args, ss_load=None):
     ## prepare data
     dsets = {}
     dset_loaders = {}
@@ -93,8 +93,35 @@ def data_load(args, moco_load=False):
     dsets["test"] = ImageList(txt_test, transform=image_test(), root=os.path.dirname(args.test_dset_path), ret_idx=True)
     dset_loaders["test"] = DataLoader(dsets["test"], batch_size=train_bs * 3, shuffle=False, num_workers=args.worker, drop_last=False)
 
-    if moco_load:
-        dsets['target_moco'] = ImageList(txt_tar, transform=moco_transform, root=os.path.dirname(args.t_dset_path), ret_idx=True)
-        dset_loaders['target_moco'] = DataLoader(dsets['target_moco'], batch_size=train_bs, shuffle=True, num_workers=args.worker, drop_last=False)
+    if ss_load == 'moco':
+        dsets['target_ss'] = ImageList(txt_tar, transform=moco_transform, root=os.path.dirname(args.t_dset_path), ret_idx=True)
+        dset_loaders['target_ss'] = DataLoader(dsets['target_ss'], batch_size=train_bs, shuffle=True, num_workers=args.worker, drop_last=False)
+    elif ss_load == 'dino':
+        dino_transform = DataAugmentationDINO(global_crops_scale=[0.6, 1.0], local_crops_scale=[0.2, 0.6],
+                                              local_crops_number=args.local_crops_num)
+        dsets['target_ss'] = ImageList(txt_tar, transform=dino_transform, root=os.path.dirname(args.t_dset_path), ret_idx=True)
+        dset_loaders['target_ss'] = DataLoader(dsets['target_ss'], batch_size=train_bs, shuffle=True, num_workers=args.worker, drop_last=False)
 
     return dset_loaders
+
+
+def reset_data_load(dset_loaders, pred_prob, args, ss_load=None):
+    """
+    modify the target data loader to return both image and pseudo label
+    """
+    txt_tar = open(args.t_dset_path).readlines()
+
+    if ss_load == 'moco':
+        data_trans = moco_transform
+    elif ss_load == 'dino':
+        data_trans = DataAugmentationDINO(global_crops_scale=[0.6, 1.0], local_crops_scale=[0.2, 0.6],
+                                          local_crops_number=args.local_crops_num)
+    else:
+        data_trans = TransformSW(mean, std, aug_k=1) if args.data_trans == 'SW' else image_train()
+
+    dsets = ImageList(txt_tar, transform=data_trans, root=os.path.dirname(args.t_dset_path), ret_idx=True, pprob=pred_prob, ret_plabel=True, args=args)
+    dloader = DataLoader(dsets, batch_size=args.batch_size, shuffle=True, num_workers=args.worker, drop_last=False)
+    if ss_load == 'moco' or ss_load == 'dino':
+        dset_loaders['target_ss'] = dloader
+    else:
+        dset_loaders['target'] = dloader
