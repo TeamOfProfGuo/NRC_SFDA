@@ -82,7 +82,7 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=2021, help="random seed")
 
     parser.add_argument('--worker', type=int, default=4, help="number of workers")
-    parser.add_argument('--dset', type=str, default='r2c')
+    parser.add_argument('--dset', type=str, default='c2a')
 
     parser.add_argument('--net', type=str, default='resnet101', help="resnet50, resnet101")
     parser.add_argument('--bottleneck', type=int, default=256)

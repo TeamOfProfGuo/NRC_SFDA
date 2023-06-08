@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from model import network, moco
 from dataset.data_list import ImageList
 from dataset.visda_data import data_load, image_train, moco_transform
-from model.model_util import obtain_ncc_label, bn_adapt, label_propagation, extract_features
+from model.model_util import obtain_ncc_label, bn_adapt, label_propagation, extract_feature_labels, extract_features
 from model.loss import compute_loss
 from dataset.data_transform import TransformSW
 from utils import cal_acc, print_args, log, set_log_path
@@ -33,10 +33,13 @@ def reset_data_load(dset_loaders, pred_prob, args, moco_load=False):
         dset_loaders['target_moco'] = dloader
     else:
         dset_loaders['target'] = dloader
-
+    
+    label_inique, label_cnt = np.unique(dsets.plabel, return_counts=True)
+    log('Pseudo label count: ' + 
+        ', '.join([ '{} : {}'.format(k, v) for k, v in zip(label_inique, label_cnt) ]) )
 
 def analysis_target(args):
-    dset_loaders = data_load(args, moco_load=True)
+    dset_loaders = data_load(args, ss_load='moco')
 
     # set base network
     netF = network.ResBase(res_name=args.net).cuda()
@@ -73,17 +76,21 @@ def analysis_target(args):
     # ======================= start training =======================
     for epoch in range(1, args.max_epoch+1):
         log('==> Start epoch {}'.format(epoch))
-        if args.use_ncc:
-            pred_labels, feats, labels, pred_probs = obtain_ncc_label(dset_loaders["test"], model.netF, model.netB, model.netC, args, log)
-        else:
-            pred_labels, feats, labels, pred_probs = extract_features(dset_loaders["test"], model.netF, model.netB, model.netC, args, log, epoch)
-
+        
+        pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"], model.netF, model.netB, model.netC, args, log, epoch)
+        if args.feat_type == 'cls': 
+            pass
+        elif args.feat_type == 'student': 
+            feats = extract_features(dset_loaders["test"], model.encoder_q, args)
+        elif args.feat_type == 'teacher': 
+            feats = extract_features(dset_loaders["test"], model.encoder_k, args)
+            
         pred_labels, pred_probs = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20)
 
         # modify data loader: (1) add pseudo label to moco data loader
         reset_data_load(dset_loaders, pred_probs, args, moco_load=True)
 
-        acc_tar = finetune_one_epoch(model, dset_loaders, optimizer)
+        acc_tar = finetune_one_epoch(model, dset_loaders, optimizer, epoch)
 
 
         # how about LR
@@ -102,10 +109,19 @@ def analysis_target(args):
                        osp.join(args.output_dir, "target_C_" + today.strftime("%Y%m%d") + ".pt"))
 
 
-def finetune_one_epoch(model, dset_loaders, optimizer):
+def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
 
     # ======================== start training / adaptation
     model.train()
+    
+    if args.loss_wt == 'c':
+        plabel_inique, plabel_cnt = np.unique(dset_loaders["target_moco"].dataset.plabel, return_counts=True)
+        sorted_idx = np.argsort(plabel_inique)
+        plabel_cnt = plabel_cnt.astype(np.float)
+        cls_weight = 1/plabel_cnt[sorted_idx]
+        cls_weight *= np.mean(plabel_cnt)
+        log('cls_weight: ' + ','.join(['{:.2f}'.format(wt) for wt in cls_weight]))
+        cls_weight = torch.tensor(cls_weight).cuda()
 
     for iter_num, batch_data in enumerate(dset_loaders["target_moco"]):
         img_tar, _, tar_idx, plabel, weight = batch_data
@@ -120,8 +136,25 @@ def finetune_one_epoch(model, dset_loaders, optimizer):
 
         logit_tar = model(img_tar[0])
         prob_tar = nn.Softmax(dim=1)(logit_tar)
-        if args.loss_wt:
+        
+        if args.loss_wt == 'p' or args.loss_wt == 'q': #  p, q both determine weight based on confidence level
+            logit_tar1 = model(img_tar[1])
+            prob_tar1 = nn.Softmax(dim=1)(logit_tar1)  # [B, K]
+            prob_dist = torch.abs(prob_tar1.detach() - prob_tar.detach()).sum(dim=1) # [B]
+            confidence_weight = 1 - torch.nn.functional.sigmoid(prob_dist)
+            ce_loss = compute_loss(plabel, prob_tar, type=args.loss_type, weight=confidence_weight)
+            
+            if args.loss_wt == 'q': 
+                ce_loss = ce_loss + 0.5 * compute_loss(plabel, prob_tar1,  type=args.loss_type, weight=confidence_weight)
+            
+            if iter_num == 0 and epoch == 1: 
+                log('pred0 {}, pred1 {}'.format(prob_tar[0], prob_tar1[0]))
+                log('confidence weight {}'.format(confidence_weight[0]))
+            
+        elif args.loss_wt == 'e':  # entropy confidence weight
             ce_loss = compute_loss(plabel, prob_tar, type=args.loss_type, weight=weight)
+        elif args.loss_wt == 'c':   # class balance weight
+            ce_loss = compute_loss(plabel, prob_tar, type=args.loss_type, weight=None, cls_weight=cls_weight)
         else:
             ce_loss = compute_loss(plabel, prob_tar, type=args.loss_type)
 
@@ -138,8 +171,13 @@ def finetune_one_epoch(model, dset_loaders, optimizer):
 
     model.eval()
     if args.dset == 'visda-2017':
-        mean_acc, classwise_acc, acc = cal_acc(dset_loaders['test'], model.netF, model.netB, model.netC, flag=True)
+        mean_acc, classwise_acc, acc, cm = cal_acc(dset_loaders['test'], model.netF, model.netB, model.netC, flag=True, ret_cm=True)
         log('After fine-tuning, Acc: {:.2f}%, Mean Acc: {:.2f}%,'.format(acc*100, mean_acc*100) + '\n' + 'Classwise accuracy: ' + classwise_acc)
+        
+        if epoch == 1 or epoch ==5: 
+            log('confusion matrix')
+            for line in cm: 
+                log(' '.join(str(e) for e in line))
 
     return mean_acc
 
@@ -163,12 +201,13 @@ if __name__ == "__main__":
     parser.add_argument('--layer', type=str, default="wn", choices=["linear", "wn"])
     parser.add_argument('--classifier', type=str, default="bn", choices=["ori", "bn"])
     parser.add_argument('--loss_type', type=str, default='sce', help='Loss function for target domain adaptation')
-    parser.add_argument('--loss_wt', action='store_false', help='Whether to use weighted CE/SCE loss')
+    parser.add_argument('--loss_wt', type=str, default='q', choices=['e', 'c', 'p', 'q', 'n'],help='Whether to use weighted CE/SCE loss')
     parser.add_argument('--use_ncc', action='store_true', help='Whether to apply NCC in the feature extraction process')
     parser.add_argument('--bn_adapt', action='store_false', help='Whether to first finetune mu and std in BN layers')
     parser.add_argument('--lp_type', type=float, default=0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
     parser.add_argument('--T_decay', type=float, default=0.8, help='Temperature decay for creating pseudo-label')
-    parser.add_argument('--nce_wt', type=float, default=0.5, help='weight for nce loss')
+    parser.add_argument('--nce_wt', type=float, default=1.0, help='weight for nce loss')
+    parser.add_argument('--feat_type', type=str, default='cls', choices=['cls', 'teacher', 'student'])
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')
@@ -176,7 +215,7 @@ if __name__ == "__main__":
     parser.add_argument('--k', type=int, default=5, help='number of neighbors for label propagation')
 
     parser.add_argument('--output', type=str, default='result/')
-    parser.add_argument('--exp_name', type=str, default='moco_wt5')
+    parser.add_argument('--exp_name', type=str, default='moco_wt1_CEq')
     parser.add_argument('--data_trans', type=str, default='W')
     args = parser.parse_args()
 

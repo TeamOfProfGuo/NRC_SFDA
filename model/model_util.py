@@ -28,7 +28,7 @@ def compute_acc(labels, preds):
     classwise_acc = ' '.join(classwise_acc)
     return acc, classwise_acc
 
-def extract_features(loader, netF, netB, netC, args, log, epoch=0, isMT = False):
+def extract_feature_labels(loader, netF, netB, netC, args, log, epoch=0, isMT = False):
     netF.eval()
     netB.eval()
     netC.eval()
@@ -69,6 +69,31 @@ def extract_features(loader, netF, netB, netC, args, log, epoch=0, isMT = False)
     log("While extracting features Acc: {:.2f}% Mean Acc: {:.2f}%".format(acc*100, mean_acc*100))
 
     return all_preds, all_feats, all_labels, all_probs
+
+
+
+def extract_features(loader, net, args, isMT = False):
+    net.eval()
+
+    all_feats = []
+    with torch.no_grad():
+        for i, batch_data in enumerate(loader):
+            inputs = batch_data[0]
+            if torch.cuda.is_available():
+                inputs = inputs.cuda()
+
+            feats = net(inputs)
+            all_feats.append(feats.float().cpu())
+
+    all_feats = torch.cat(all_feats, dim=0)
+    if args.distance == 'cosine1':
+        all_feats = torch.cat((all_feats, torch.ones(all_feats.shape[0], 1)), dim=1)
+        all_feats = all_feats / torch.norm(all_feats, p=2, dim=1, keepdim=True)
+    elif args.distance == 'cosine':
+        all_feats = all_feats / torch.norm(all_feats, p=2, dim=1, keepdim=True)
+    all_feats = all_feats.numpy()
+
+    return all_feats
 
 
 def obtain_ncc_label(loader, netF, netB, netC, args, log):

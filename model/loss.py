@@ -83,13 +83,15 @@ class SCELoss(torch.nn.Module):
         return loss
 
 
-def compute_loss(targets, pred, type='ce', reduction='mean', weight=None):
+def compute_loss(targets, pred, type='ce', reduction='mean', weight=None, cls_weight=None):
     batch_size, num_cls = pred.size()
     if targets.ndim < 2:
         ones = torch.eye(num_cls, device=pred.device)
         soft_targets = torch.index_select(ones, dim=0, index=targets)
+        hard_targets = targets
     else:
         soft_targets = targets
+        hard_targets = soft_targets.argmax(dim=1)
 
     if type == 'ce':
         loss = cross_entropy(soft_targets, pred, reduction=reduction)
@@ -99,6 +101,9 @@ def compute_loss(targets, pred, type='ce', reduction='mean', weight=None):
 
     if weight is not None:
         loss = loss * weight
+    if cls_weight is not None: 
+        elementwise_weight = cls_weight[hard_targets]
+        loss = loss * elementwise_weight
+        
     loss = loss.sum() / batch_size
-
     return loss

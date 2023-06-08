@@ -1,4 +1,5 @@
 # encoding:utf-8
+import pdb
 import torch
 import torch.nn as nn
 import numpy as np
@@ -9,7 +10,7 @@ import argparse, os, random
 from model import network, moco, dino
 from model.loss import compute_loss
 from dataset.visda_data import data_load, reset_data_load
-from model.model_util import bn_adapt, label_propagation, extract_features
+from model.model_util import bn_adapt, label_propagation, extract_feature_labels
 from utils import cal_acc, print_args, log, set_log_path, get_params_groups, cosine_scheduler, clip_gradients
 
 
@@ -69,13 +70,14 @@ def analysis_target(args):
     for epoch in range(0, args.max_epoch):
         log('==> Start epoch {}'.format(epoch))
 
-        pred_labels, feats, labels, pred_probs = extract_features(dset_loaders["test"], model.netF, model.netB, model.netC, args, log, epoch)
+        pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"], model.netF, model.netB, model.netC, args, log, epoch)
 
         pred_labels, pred_probs = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20)
 
         # modify data loader: (1) add pseudo label to moco data loader
         reset_data_load(dset_loaders, pred_probs, args, ss_load='dino')
 
+        #pdb.set_trace()
         acc_tar = finetune_one_epoch(model, dset_loaders, optimizer, lr_schedule, momentum_schedule, dino_loss, epoch=epoch)
 
         log('Current lr is netF: {:.5f}, netB: {:.5f}, netC: {:.5f}, dino: {:.5f}'.format(
@@ -97,6 +99,7 @@ def finetune_one_epoch(model, dset_loaders, optimizer, lr_schedule, momentum_sch
     # ======================== start training / adaptation
     model.train()
 
+    ss_loss_epoch, ce_loss_epoch = 0.0, 0.0
     for iter_num, batch_data in enumerate(dset_loaders["target_ss"]):
         img_tar, _, tar_idx, plabel, weight = batch_data
 
@@ -118,12 +121,15 @@ def finetune_one_epoch(model, dset_loaders, optimizer, lr_schedule, momentum_sch
             ce_loss = compute_loss(plabel, prob_tar, type=args.loss_type, weight=weight)
         else:
             ce_loss = compute_loss(plabel, prob_tar, type=args.loss_type)
+            
+        ss_loss_epoch += ss_loss.item()
+        ce_loss_epoch += ce_loss.item()
 
         loss = ce_loss + args.nce_wt * ss_loss
         optimizer.zero_grad()
         loss.backward()
         if args.clip_grad:
-            param_norms = clip_gradients(moco.student, args.clip_grad)
+            param_norms = clip_gradients(model.student, args.clip_grad)
         optimizer.step()
 
         # update the teacher network
@@ -134,9 +140,13 @@ def finetune_one_epoch(model, dset_loaders, optimizer, lr_schedule, momentum_sch
     lr_schedule.step()
 
     model.eval()
+    ss_loss_epoch /= len(dset_loaders["target_ss"])
+    ce_loss_epoch /= len(dset_loaders["target_ss"])
     if args.dset == 'visda-2017':
         mean_acc, classwise_acc, acc = cal_acc(dset_loaders['test'], model.netF, model.netB, model.netC, flag=True)
-        log('After fine-tuning, Acc: {:.2f}%, Mean Acc: {:.2f}%,'.format(acc*100, mean_acc*100) + '\n' + 'Classwise accuracy: ' + classwise_acc)
+        log('After fine-tuning, Acc: {:.2f}%, Mean Acc: {:.2f}%, ce_loss: {:.4f}, ss_loss: {:.4f}'.format(
+            acc*100, mean_acc*100, ce_loss_epoch, ss_loss_epoch) 
+            + '\n' + 'Classwise accuracy: ' + classwise_acc)
 
     return mean_acc
 
@@ -168,7 +178,7 @@ if __name__ == "__main__":
     parser.add_argument('--hidden_dim', type=int, default=1024, help='hidden dim for the projection head in dino')
     parser.add_argument('--bottleneck_dim', type=int, default=256, help='bottleneck dim for the projection head in dino')
     parser.add_argument('--out_dim', type=int, default=8192, help='output dim of dino')
-    parser.add_argument('--nce_wt', type=float, default=0.5, help='weight for nce loss')
+    parser.add_argument('--nce_wt', type=float, default=0.1, help='weight for nce loss')
     parser.add_argument('--local_crops_num', type=int, default=2, help='num of small local views')
     parser.add_argument('--momentum_teacher', default=0.996, type=float, help="""Base EMA param for teacher update. 
             We recommend setting a higher value with small batches: for example use 0.9995 with batch size of 256.""")
@@ -180,7 +190,7 @@ if __name__ == "__main__":
     parser.add_argument('--k', type=int, default=5, help='number of neighbors for label propagation')
 
     parser.add_argument('--output', type=str, default='result/')
-    parser.add_argument('--exp_name', type=str, default='dino')
+    parser.add_argument('--exp_name', type=str, default='dino_wt1')
     parser.add_argument('--data_trans', type=str, default='W')
     args = parser.parse_args()
 

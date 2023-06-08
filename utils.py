@@ -71,7 +71,7 @@ def clip_gradients(model, clip):
     return norms
 
 
-def cal_acc(loader, netF, netB, netC, flag=False):
+def cal_acc(loader, netF, netB, netC, flag=False, ret_cm=False):
     start_test = True
     netF.eval()
     netB.eval()
@@ -103,7 +103,10 @@ def cal_acc(loader, netF, netB, netC, flag=False):
         mean_acc = acc.mean()
         classwise_acc = [str(np.round(i*100, 2)) for i in acc]
         classwise_acc = ' '.join(classwise_acc)
-        return mean_acc, classwise_acc, accuracy
+        if ret_cm: 
+            return mean_acc, classwise_acc, accuracy, matrix
+        else: 
+            return mean_acc, classwise_acc, accuracy
     else:
         return accuracy, mean_ent
 

@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from model import network
 from dataset.data_list import ImageList
 from dataset.visda_data import data_load, image_train
-from model.model_util import obtain_ncc_label, bn_adapt, label_propagation, extract_features
+from model.model_util import obtain_ncc_label, bn_adapt, label_propagation, extract_feature_labels
 from model.loss import compute_loss
 from dataset.data_transform import TransformSW
 from utils import cal_acc, print_args, log, set_log_path
@@ -64,7 +64,7 @@ def analysis_target(args):
         if args.use_ncc:
             pred_labels, feats, labels, pred_probs = obtain_ncc_label(dset_loaders["test"], netF, netB, netC, args, log)
         else:
-            pred_labels, feats, labels, pred_probs = extract_features(dset_loaders["test"], netF, netB, netC, args, log, epoch)
+            pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"], netF, netB, netC, args, log, epoch)
 
         pred_labels, pred_probs = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20)
         reset_data_load(dset_loaders, pred_probs, args)

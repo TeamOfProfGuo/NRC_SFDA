@@ -24,7 +24,7 @@ class GaussianBlur(object):
     """
     Apply Gaussian Blur to the PIL image.
     """
-    def __init__(self, p=0.5, radius_min=0.1, radius_max=2.):
+    def __init__(self, p=1.0, radius_min=0.1, radius_max=2.):
         self.prob = p
         self.radius_min = radius_min
         self.radius_max = radius_max
