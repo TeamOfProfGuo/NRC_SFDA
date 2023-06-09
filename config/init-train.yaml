@@ -1,0 +1,58 @@
+TRAIN:
+  batch_size: 64
+  log_freq: 100  # log information every 100 iterations
+  source_data_name: train
+  target_data_name: validation
+  gpu_id=_id: '0'
+  max_epochs: 30
+  bn_adapt: True   # whether to first finetune miu and std in BN layers
+  agg_init_ep: 15    # epochs to initize the aggregator weights
+  init_seudolabel_ep: 8  # epochs to initize the model to get decend pseudo label
+  add_aggreg_ep: 30    # epochs after adding the aggregator of features
+  max_logit_thres: 0.45   # max threshold to select confident logits
+  min_logit_thres: 0.1   # min threshold to select confident logits
+  acc_iter: 2
+
+MODLE:
+  net: resnet101
+  height: 160
+  width: 240
+  input_size: 224
+  mask_ratio: 0.75
+  norm_pix_loss: False
+  bottleneck: 256
+  layer: wn
+  classifier: bn
+  weight_dir: weight/visda-2017
+
+OPT:
+  weight_decay: 0.05
+  lr: 0.003  # 0.01 
+  blr: 0.00015
+  min_lr: 0.000001   # 1e-06
+  warmup_epochs: 4
+  loss_type: sce
+  loss_wt: True   # whether to use weighted CE/SCE loss
+  use_ncc: False   # whether to apply NCC in the feature extraction process
+  nce_wt: 1.0  # weight for nce loss
+
+DATA:
+  dataset: visda-2017
+  output_dir: results
+  device: cuda
+  root: ../../dataset/
+  # seed: 2021
+  seed: 0
+  flip: 0.5
+  labelprop_type: 0   # label propagation type: 0:hard label, >0: temperature
+  T_decay: 0.8    # Temperature decay for creating pseudo-label   (sharpen label)
+  # possible weight decay for nce loss 
+  distance: cosine
+  threshold: 10  # threshold for filtering cluster centroid
+  k_neighbors: 10
+  data_trans: W
+  class_num: 12
+
+DIST:
+  num_workers: 2
+  pin_mem: True
