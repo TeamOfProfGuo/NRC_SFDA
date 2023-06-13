@@ -1,10 +1,12 @@
+import pdb
+import math
 import numpy as np
+
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
-import math
 import torch.nn.functional as F
-import pdb
+
+from torch.autograd import Variable
 
 
 class CrossEntropyLabelSmooth(nn.Module):
@@ -71,8 +73,8 @@ class SCELoss(torch.nn.Module):
 
     def forward(self, labels, pred, reduction='mean'):
         # CCE
-        # ce = cross_entropy(labels, pred, reduction=reduction)
-        ce = F.cross_entropy(pred, labels, reduction=reduction)
+        ce = cross_entropy(labels, pred, reduction=reduction)
+        # ce = F.cross_entropy(pred, labels, reduction=reduction)
 
         # RCE
         pred = F.softmax(pred, dim=1)

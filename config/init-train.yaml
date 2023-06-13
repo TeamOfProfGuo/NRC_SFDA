@@ -4,14 +4,15 @@ TRAIN:
   source_data_name: train
   target_data_name: validation
   gpu_id=_id: '0'
-  max_epochs: 30
+  max_epochs: 35
   bn_adapt: True   # whether to first finetune miu and std in BN layers
   agg_init_ep: 15    # epochs to initize the aggregator weights
   init_seudolabel_ep: 8  # epochs to initize the model to get decend pseudo label
   add_aggreg_ep: 30    # epochs after adding the aggregator of features
-  max_logit_thres: 0.45   # max threshold to select confident logits
+  max_logit_thres: 0.4   # max threshold to select confident logits
   min_logit_thres: 0.1   # min threshold to select confident logits
   acc_iter: 2
+  momentum: 0.75
 
 MODLE:
   net: resnet101

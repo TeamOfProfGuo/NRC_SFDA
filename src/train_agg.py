@@ -263,16 +263,16 @@ class Trainer(object):
 
 
     def train(self):
-        # # performance of original model
-        # Log.info("Checking the performance of the original model")
-        # mean_acc, classwise_acc, acc = self.cal_acc(self.dataloaders["target"], self.netF, self.netB, self.netC, flag=True)
-        # Log.info("Source model accuracy on target domain: {:.2f}%".format(mean_acc*100) + '\nClasswise accuracy: {}\n'.format(classwise_acc))
+        # performance of original model
+        Log.info("Checking the performance of the original model")
+        mean_acc, classwise_acc, acc = self.cal_acc(self.dataloaders["target"], self.netF, self.netB, self.netC, flag=True)
+        Log.info("Source model accuracy on target domain: {:.2f}%".format(mean_acc*100) + '\nClasswise accuracy: {}\n'.format(classwise_acc))
 
-        # # adapt the batch normalization layer
-        # MAX_TEXT_ACC = mean_acc
-        # if self.args.bn_adapt:
-        #     Log.info("Adapt Batch Norm parameters")
-        #     self.netF, self.netB = bn_adapt(self.netF, self.netB, self.dataloaders["target"], runs=1000)
+        # adapt the batch normalization layer
+        MAX_TEXT_ACC = mean_acc
+        if self.args.bn_adapt:
+            Log.info("Adapt Batch Norm parameters")
+            self.netF, self.netB = bn_adapt(self.netF, self.netB, self.dataloaders["target"], runs=1000)
 
         Log.info("Start Training")
         # with aggregator
