@@ -134,29 +134,33 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
         plabel = plabel.cuda()
         weight = weight.cuda()
 
-        logit_tar = model(img_tar[0])
-        prob_tar = nn.Softmax(dim=1)(logit_tar)
+        logit_tar0 = model(img_tar[0])
+        prob_tar0 = nn.Softmax(dim=1)(logit_tar0)
+        logit_tar1 = model(img_tar[1])
+        prob_tar1 = nn.Softmax(dim=1)(logit_tar1)  # [B, K]
         
-        if args.loss_wt == 'p' or args.loss_wt == 'q': #  p, q both determine weight based on confidence level
-            logit_tar1 = model(img_tar[1])
-            prob_tar1 = nn.Softmax(dim=1)(logit_tar1)  # [B, K]
-            prob_dist = torch.abs(prob_tar1.detach() - prob_tar.detach()).sum(dim=1) # [B]
+        if args.loss_wt[0] == 'e':  # entropy weight
+            pass 
+        elif args.loss_wt[0] == 'p': 
+            prob_dist = torch.abs(prob_tar1.detach() - prob_tar0.detach()).sum(dim=1) # [B]
             confidence_weight = 1 - torch.nn.functional.sigmoid(prob_dist)
-            ce_loss = compute_loss(plabel, prob_tar, type=args.loss_type, weight=confidence_weight)
+            weight = confidence_weight
+        
+        if args.loss_wt[1] == 'c': 
+            pass 
+        else: 
+            cls_weight = None
             
-            if args.loss_wt == 'q': 
-                ce_loss = ce_loss + 0.5 * compute_loss(plabel, prob_tar1,  type=args.loss_type, weight=confidence_weight)
-            
-            if iter_num == 0 and epoch == 1: 
-                log('pred0 {}, pred1 {}'.format(prob_tar[0], prob_tar1[0]))
-                log('confidence weight {}'.format(confidence_weight[0]))
-            
-        elif args.loss_wt == 'e':  # entropy confidence weight
-            ce_loss = compute_loss(plabel, prob_tar, type=args.loss_type, weight=weight)
-        elif args.loss_wt == 'c':   # class balance weight
-            ce_loss = compute_loss(plabel, prob_tar, type=args.loss_type, weight=None, cls_weight=cls_weight)
-        else:
-            ce_loss = compute_loss(plabel, prob_tar, type=args.loss_type)
+        ce0_wt, ce1_wt = float(args.loss_wt[2])/10, 1-float(args.loss_wt[2])/10
+        
+        ce_loss0 =  compute_loss(plabel, prob_tar0, type=args.loss_type, weight=weight, cls_weight=cls_weight)
+        ce_loss1 =  compute_loss(plabel, prob_tar1, type=args.loss_type, weight=weight, cls_weight=cls_weight)
+        ce_loss = ce0_wt * ce_loss0 + ce1_wt * ce_loss1
+        
+        if iter_num == 0 and epoch == 1: 
+            log('pred0 {}, pred1 {}'.format(prob_tar0[0].cpu().detach().numpy(), prob_tar1[0].cpu().detach().numpy()))
+            log('{} weight {}'.format('entropy' if args.loss_wt[0]=='e' else 'confidence',
+                                      weight[0:5].cpu().numpy()))
 
         if img_tar[0].size(0) == args.batch_size:
             output, target = model.moco_forward(im_q=img_tar[0], im_k=img_tar[1])
@@ -201,12 +205,11 @@ if __name__ == "__main__":
     parser.add_argument('--layer', type=str, default="wn", choices=["linear", "wn"])
     parser.add_argument('--classifier', type=str, default="bn", choices=["ori", "bn"])
     parser.add_argument('--loss_type', type=str, default='sce', help='Loss function for target domain adaptation')
-    parser.add_argument('--loss_wt', type=str, default='q', choices=['e', 'c', 'p', 'q', 'n'],help='Whether to use weighted CE/SCE loss')
-    parser.add_argument('--use_ncc', action='store_true', help='Whether to apply NCC in the feature extraction process')
+    parser.add_argument('--loss_wt', type=str, default='pn5', help='CE/SCE loss weight: e|p|n, c|n, 0-9')
     parser.add_argument('--bn_adapt', action='store_false', help='Whether to first finetune mu and std in BN layers')
     parser.add_argument('--lp_type', type=float, default=0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
     parser.add_argument('--T_decay', type=float, default=0.8, help='Temperature decay for creating pseudo-label')
-    parser.add_argument('--nce_wt', type=float, default=1.0, help='weight for nce loss')
+    parser.add_argument('--nce_wt', type=float, default=0.5, help='weight for nce loss')
     parser.add_argument('--feat_type', type=str, default='cls', choices=['cls', 'teacher', 'student'])
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
@@ -215,7 +218,7 @@ if __name__ == "__main__":
     parser.add_argument('--k', type=int, default=5, help='number of neighbors for label propagation')
 
     parser.add_argument('--output', type=str, default='result/')
-    parser.add_argument('--exp_name', type=str, default='moco_wt1_CEq')
+    parser.add_argument('--exp_name', type=str, default='moco_wt5_pn5')
     parser.add_argument('--data_trans', type=str, default='W')
     args = parser.parse_args()
 

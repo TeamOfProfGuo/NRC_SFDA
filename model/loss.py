@@ -68,7 +68,7 @@ class SCELoss(torch.nn.Module):
         self.alpha = alpha
         self.beta = beta
 
-    def forward(self, labels, pred, reduction='mean'):
+    def forward(self, labels, pred, reduction='mean', rce_weight=None):
         # CCE
         ce = cross_entropy(labels, pred, reduction=reduction)
 
@@ -79,11 +79,14 @@ class SCELoss(torch.nn.Module):
         rce = cross_entropy(pred, labels, reduction=reduction)
 
         # Loss
-        loss = self.alpha * ce + self.beta * rce
+        if rce_weight is not None:
+            loss = self.alpha * ce + rce_weight * rce 
+        else:
+            loss = self.alpha * ce + self.beta * rce  
         return loss
 
 
-def compute_loss(targets, pred, type='ce', reduction='mean', weight=None, cls_weight=None):
+def compute_loss(targets, pred, type='ce', reduction='mean', weight=None, cls_weight=None, rce_weight=None):
     batch_size, num_cls = pred.size()
     if targets.ndim < 2:
         ones = torch.eye(num_cls, device=pred.device)
@@ -97,7 +100,7 @@ def compute_loss(targets, pred, type='ce', reduction='mean', weight=None, cls_we
         loss = cross_entropy(soft_targets, pred, reduction=reduction)
     elif type == 'sce':
         loss_criterion = SCELoss()
-        loss = loss_criterion(soft_targets, pred, reduction=reduction)
+        loss = loss_criterion(soft_targets, pred, reduction=reduction, rce_weight = rce_weight)
 
     if weight is not None:
         loss = loss * weight
