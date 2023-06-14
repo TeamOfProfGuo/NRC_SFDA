@@ -12,7 +12,7 @@ TRAIN:
   max_logit_thres: 0.4   # max threshold to select confident logits
   min_logit_thres: 0.1   # min threshold to select confident logits
   acc_iter: 2
-  momentum: 0.75
+  momentum: 0.8
 
 MODLE:
   net: resnet101

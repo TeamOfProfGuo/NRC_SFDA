@@ -37,6 +37,8 @@ class ImageList(Dataset):
         if len(imgs) == 0:
             raise(RuntimeError("Found 0 images in subfolders of: " + root + "\n"
                                "Supported image extensions are: " + ",".join(IMG_EXTENSIONS)))
+
+        self.args = args
         self.root = root
         self.ret_idx = ret_idx
         self.ret_plabel = ret_plabel
@@ -67,7 +69,9 @@ class ImageList(Dataset):
         ret = [img, target]
         if self.ret_idx:
             ret.append(index)
+
         if self.ret_plabel:
+            # pdb.set_trace()
             plabel = self.plabel[index]
             weight = self.weights[index]
             if self.target_transform is not None:
@@ -79,4 +83,11 @@ class ImageList(Dataset):
 
 
     def __len__(self):
-        return len(self.imgs)
+        # after label prop
+        if self.ret_plabel:
+            if self.args.test:
+                return len(self.imgs[:192])
+            else:
+                return len(self.imgs)
+        else:
+            return len(self.imgs)

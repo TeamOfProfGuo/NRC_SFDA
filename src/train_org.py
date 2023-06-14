@@ -140,8 +140,11 @@ class Trainer(object):
 
     def _init_base_network(self):
         # build model
+        # feature extractor
         self.netF = network.ResBase(res_name=self.args.net).to(self.device)
+        # bottleneck
         self.netB = network.feat_bootleneck(type=self.args.classifier, feature_dim=self.netF.in_features, bottleneck_dim=self.args.bottleneck).to(self.device)
+        # classifer
         self.netC = network.feat_classifier(type=self.args.layer, class_num=self.args.class_num, bottleneck_dim=self.args.bottleneck).to(self.device)
 
         # load net weight
@@ -175,6 +178,7 @@ class Trainer(object):
         batch_time = time.time()
 
         for iter_num, batch_data in enumerate(self.dataloaders["target_moco"]):
+            # scheuler
             adjust_learning_rate(self.optimizer, iter_num / len(self.dataloaders["target_moco"]) + epoch, self.args)
 
             img_tar, _, tar_idx, plabel, weight = batch_data
@@ -353,22 +357,22 @@ class Trainer(object):
         return math.log(threshold) / 5
 
 
-
 def parse_config():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', required=True, type=str, help='config file path')
     parser.add_argument('--exp_name', required=True, type=str, help='experiment name')
     parser.add_argument('--exp_id', required=True, type=str, help='config modifications')
     args = parser.parse_args()
-    cfg = load_cfg_from_cfg_file(args.config)
+    cfg = load_cfg_from_cfg_file(args.config)  # handle config file
     # update exp_name and exp_id
     cfg['exp_name'] = args.exp_name
     cfg['exp_id'] = args.exp_id
     return cfg
 
+
 if __name__ == "__main__":
     args = parse_config()
-
+    pdb.set_trace()
     seed = args.seed
     if seed is not None:
         cudnn.benchmark = True
@@ -414,7 +418,8 @@ if __name__ == "__main__":
         msg += f'   {arg}\n'
     msg += f'\n[exp_name]: {args.exp_name}\n[exp_id]: {args.exp_id}\n[save_path]: {args.save_path}\n'
     Log.info(msg)
-
+    
+    # use the exp_id to update config
     args.update()
 
     trainer = Trainer(args)

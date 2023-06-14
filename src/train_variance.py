@@ -88,47 +88,53 @@ class Trainer(object):
             if img_tar[0].size(0) == 1:
                 continue
 
-            img_tar[0] = img_tar[0].cuda()
+            img_tar[0] = img_tar[0].cuda()  # img_tar: list | img_tar[0]: query image for moco | img_tar[1]: key image for moco 
             img_tar[1] = img_tar[1].cuda()
             plabel = plabel.cuda()
-            weight = weight.cuda()
+            # weight = weight.cuda()
 
             logit_tar = self.model(img_tar[0])
             prob_tar = nn.Softmax(dim=1)(logit_tar)
 
             max_prob, pred_label = prob_tar.max(dim=1)
-            pdb.set_trace()
 
-            start = iter_num*img_tar.shape[0]
-            end = (iter_num+1)*img_tar.shape[0]
-            
+            start = iter_num*img_tar[0].shape[0]
+            end = (iter_num+1)*img_tar[0].shape[0]
+
             # first epoch
             if epoch == 0:
                 if iter_num == 0:
                     self.avg_prob = max_prob   # [b]
                     self.avg_label = pred_label  # [b]
-                    self.avg_prob_square = max_prob ** 2
+                    self.probs = torch.zeros((len(self.dataloaders["target_moco"])*img_tar[0].shape[0], 1)).cuda()
                 else:
-                    self.avg_prob = torch.cat(self.avg_prob, max_prob)
-                    self.avg_label = torch.cat(self.avg_label, pred_label)
-                    self.avg_prob_square = torch.cat(self.avg_prob_square, max_prob ** 2)
+                    self.avg_prob = torch.cat((self.avg_prob, max_prob), dim=0)
+                    self.avg_label = torch.cat((self.avg_label, pred_label), dim=0)
             # other epochs
             else:
+                # initialize the matrix for recording the probs
+                if iter_num == 0:
+                    self.probs = torch.cat((self.probs, torch.zeros((len(self.dataloaders["target_moco"])*img_tar[0].shape[0], 1)).cuda()), dim=1)
                 # running average of the predicted label
                 self.avg_label[start:end] = self.args.momentum*pred_label + (1-self.args.momentum)*self.avg_label[start:end]
                 # running average of the max probability
                 self.avg_prob[start:end] = self.args.momentum*max_prob + (1-self.args.momentum)*self.avg_prob[start:end]
-                # running average of the max prob square
-                self.avg_prob_square[start:end] = self.args.momentum*max_prob**2 + (1-self.args.momentum)*self.avg_prob_square[start:end]
+
+            # record the probs
+            self.probs[start:end, epoch] = max_prob
 
             # computer the variance
-            variance = self.avg_prob_square[start:end] - self.avg_prob[start:end]  # variance formula Var(x)=E[x^2]-E^2[x]
+            if epoch == 0:
+                variance = torch.ones(img_tar[0].shape[0])
+            else:
+                variance = (self.probs[start:end, :]-self.avg_label[start:end].unsqueeze(1))**2
+                variance = (torch.sum(variance, dim=1) / epoch) ** 0.5
+
             # get the confidence score base on variance
             confidence = 1 - F.sigmoid(variance)   # bigger variance gets lower confidence
 
-
             if args.loss_wt:
-                ce_loss = compute_loss(plabel, prob_tar, type=self.args.loss_type, reduction='none', weight=confidence, cls_weight=False)
+                ce_loss = compute_loss(plabel, prob_tar, type=self.args.loss_type, reduction='none', weight=confidence.cuda(), cls_weight=False)
             else:
                 ce_loss = compute_loss(plabel, prob_tar, type=self.args.loss_type)
 
@@ -183,16 +189,18 @@ class Trainer(object):
 
 
     def train(self):
-        # performance of original model
-        Log.info("Checking the performance of the original model")
-        mean_acc, classwise_acc, acc = self.cal_acc(self.dataloaders["target"], self.netF, self.netB, self.netC, flag=True)
-        Log.info("Source model accuracy on target domain: {:.2f}%".format(mean_acc*100) + '\nClasswise accuracy: {}\n'.format(classwise_acc))
+        # do not do these when 
+        if not self.args.test:
+            # performance of original model
+            Log.info("Checking the performance of the original model")
+            mean_acc, classwise_acc, acc = self.cal_acc(self.dataloaders["target"], self.netF, self.netB, self.netC, flag=True)
+            Log.info("Source model accuracy on target domain: {:.2f}%".format(mean_acc*100) + '\nClasswise accuracy: {}\n'.format(classwise_acc))
 
-        # adapt the batch normalization layer
-        MAX_TEXT_ACC = mean_acc
-        if self.args.bn_adapt:
-            Log.info("Adapt Batch Norm parameters")
-            self.netF, self.netB = bn_adapt(self.netF, self.netB, self.dataloaders["target"], runs=1000)
+            # adapt the batch normalization layer
+            MAX_TEXT_ACC = mean_acc
+            if self.args.bn_adapt:
+                Log.info("Adapt Batch Norm parameters")
+                self.netF, self.netB = bn_adapt(self.netF, self.netB, self.dataloaders["target"], runs=1000)
 
         Log.info("Start Training")
         # epochs to get decend pseudo label
@@ -215,6 +223,7 @@ class Trainer(object):
             self.reset_data_load(pred_probs, select_idx=None, moco_load=True)
 
             acc_tar, all_feats = self.finetune_one_epoch(epoch, get_acc=True)
+            # self.finetune_one_epoch(epoch, get_acc=True)
 
             # step scheduler only works for the init adapt period
             self.scheduler.step()
@@ -306,6 +315,13 @@ def parse_config():
 
 if __name__ == "__main__":
     args = parse_config()
+
+    # entering the test mode
+    # test mode only compute first several batches so that debugging will be much faster
+    if args.exp_name == 'test':
+        args.test = True
+    else:
+        args.test = False
 
     seed = args.seed
     if seed is not None:

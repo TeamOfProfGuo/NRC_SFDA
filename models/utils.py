@@ -67,7 +67,7 @@ class PPMModule(nn.Module):
         return out   # bottle
 
 
-def extract_features(loader, netF, netB, netC, args, epoch=1, isMT = False):    
+def extract_features(loader, netF, netB, netC, args, epoch=1, isMT=False):    
     netF.eval()
     netB.eval()
     netC.eval()
@@ -95,8 +95,8 @@ def extract_features(loader, netF, netB, netC, args, epoch=1, isMT = False):
             all_probs.append(probs.float().cpu())  # [192, 12]
             all_labels.append(labels)
 
-            # if i == 4:
-            #     break
+            if args.test:
+                break
 
     all_feats = torch.cat(all_feats, dim=0)
     if args.distance == 'cosine':
