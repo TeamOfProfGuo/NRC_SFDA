@@ -114,7 +114,7 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
     # ======================== start training / adaptation
     model.train()
     
-    if args.loss_wt == 'c':
+    if args.loss_wt[1] == 'c':
         plabel_inique, plabel_cnt = np.unique(dset_loaders["target_moco"].dataset.plabel, return_counts=True)
         sorted_idx = np.argsort(plabel_inique)
         plabel_cnt = plabel_cnt.astype(np.float)
@@ -155,7 +155,7 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
         
         ce_loss0 =  compute_loss(plabel, prob_tar0, type=args.loss_type, weight=weight, cls_weight=cls_weight)
         ce_loss1 =  compute_loss(plabel, prob_tar1, type=args.loss_type, weight=weight, cls_weight=cls_weight)
-        ce_loss = ce0_wt * ce_loss0 + ce1_wt * ce_loss1
+        ce_loss =  2.0 * ce0_wt * ce_loss0 + 2.0 * ce1_wt * ce_loss1
         
         if iter_num == 0 and epoch == 1: 
             log('pred0 {}, pred1 {}'.format(prob_tar0[0].cpu().detach().numpy(), prob_tar1[0].cpu().detach().numpy()))
@@ -209,7 +209,7 @@ if __name__ == "__main__":
     parser.add_argument('--bn_adapt', action='store_false', help='Whether to first finetune mu and std in BN layers')
     parser.add_argument('--lp_type', type=float, default=0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
     parser.add_argument('--T_decay', type=float, default=0.8, help='Temperature decay for creating pseudo-label')
-    parser.add_argument('--nce_wt', type=float, default=0.5, help='weight for nce loss')
+    parser.add_argument('--nce_wt', type=float, default=1.0, help='weight for nce loss')
     parser.add_argument('--feat_type', type=str, default='cls', choices=['cls', 'teacher', 'student'])
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
@@ -218,7 +218,7 @@ if __name__ == "__main__":
     parser.add_argument('--k', type=int, default=5, help='number of neighbors for label propagation')
 
     parser.add_argument('--output', type=str, default='result/')
-    parser.add_argument('--exp_name', type=str, default='moco_wt5_pn5')
+    parser.add_argument('--exp_name', type=str, default='moco_wt1_pn5_mocoB2')
     parser.add_argument('--data_trans', type=str, default='W')
     args = parser.parse_args()
 
