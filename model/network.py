@@ -76,7 +76,7 @@ class feat_bootleneck(nn.Module):
 
 
 class feat_classifier(nn.Module):
-    def __init__(self, class_num, bottleneck_dim=256, type="linear"):
+    def __init__(self, class_num, bottleneck_dim=256, type="linear", with_rl=False, with_dr=False):
         super(feat_classifier, self).__init__()
         self.type = type
         if type == 'wn':
@@ -86,6 +86,25 @@ class feat_classifier(nn.Module):
             self.fc = nn.Linear(bottleneck_dim, class_num)
             self.fc.apply(init_weights)
 
+        self.with_rl = with_rl
+        self.with_dr = with_dr
+
+        if self.with_dr:
+            self.dr = nn.Dropout(0.1)
+
     def forward(self, x):
+        if self.with_rl:
+            x = torch.nn.functional.relu(x)
+        if self.with_dr:
+            x = self.dr(x)
         x = self.fc(x)
         return x
+
+    def reset_rd(self, with_rl, with_dr):
+        self.with_rl = with_rl
+        self.with_dr = with_dr
+
+        if self.with_dr:
+            self.dr = nn.Dropout(0.1)
+
+

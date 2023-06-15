@@ -3,6 +3,7 @@ import numpy as np
 import os.path as osp
 from datetime import date
 import argparse, os, random
+import copy
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -51,8 +52,12 @@ def analysis_target(args):
     netB.load_state_dict(torch.load(modelpath))
     modelpath = args.output_dir_src + '/source_C.pt'
     netC.load_state_dict(torch.load(modelpath))
+    netC_copy = copy.deepcopy(netC)
 
-    # performance of original model
+    if args.cls_type == 'rd':
+        netC.reset_rd(with_rl=True, with_dr=True)
+
+    # ========== performance of original model ==========
     mean_acc, classwise_acc, acc = cal_acc(dset_loaders["target"], netF, netB, netC, flag=True)
     log("Source model accuracy on target domain: {:.2f}%".format(mean_acc*100) + '\nClasswise accuracy: {}'.format(classwise_acc))
 
@@ -76,14 +81,18 @@ def analysis_target(args):
     # ======================= start training =======================
     for epoch in range(1, args.max_epoch+1):
         log('==> Start epoch {}'.format(epoch))
-        
-        pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"], model.netF, model.netB, model.netC, args, log, epoch)
-        if args.feat_type == 'cls': 
-            pass
-        elif args.feat_type == 'student': 
-            feats = extract_features(dset_loaders["test"], model.encoder_q, args)
-        elif args.feat_type == 'teacher': 
-            feats = extract_features(dset_loaders["test"], model.encoder_k, args)
+
+        if epoch == 1:
+            pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"], netF, netB, netC_copy, args, log, epoch)
+        else:
+            model.eval()
+            pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"], model.netF, model.netB, model.netC, args, log, epoch)
+            if args.feat_type == 'cls':
+                pass
+            elif args.feat_type == 'student':
+                feats = extract_features(dset_loaders["test"], model.encoder_q, args)
+            elif args.feat_type == 'teacher':
+                feats = extract_features(dset_loaders["test"], model.encoder_k, args)
             
         pred_labels, pred_probs = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20)
 
@@ -91,7 +100,6 @@ def analysis_target(args):
         reset_data_load(dset_loaders, pred_probs, args, moco_load=True)
 
         acc_tar = finetune_one_epoch(model, dset_loaders, optimizer, epoch)
-
 
         # how about LR
         scheduler.step()
@@ -157,15 +165,16 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
         ce_loss1 =  compute_loss(plabel, prob_tar1, type=args.loss_type, weight=weight, cls_weight=cls_weight)
         ce_loss =  2.0 * ce0_wt * ce_loss0 + 2.0 * ce1_wt * ce_loss1
         
-        if iter_num == 0 and epoch == 1: 
-            log('pred0 {}, pred1 {}'.format(prob_tar0[0].cpu().detach().numpy(), prob_tar1[0].cpu().detach().numpy()))
-            log('{} weight {}'.format('entropy' if args.loss_wt[0]=='e' else 'confidence',
-                                      weight[0:5].cpu().numpy()))
+        # if iter_num == 0 and epoch == 1:
+        #     log('pred0 {}, pred1 {}'.format(prob_tar0[0].cpu().detach().numpy(), prob_tar1[0].cpu().detach().numpy()))
+        #     log('{} weight {}'.format('entropy' if args.loss_wt[0]=='e' else 'confidence',
+        #                               weight[0:5].cpu().numpy()))
 
         if img_tar[0].size(0) == args.batch_size:
             output, target = model.moco_forward(im_q=img_tar[0], im_k=img_tar[1])
             nce_loss = nn.CrossEntropyLoss()(output, target)
-            loss = ce_loss + args.nce_wt * nce_loss
+            nce_wt = args.nce_wt * (1+(epoch-1)/args.max_epoch) ** (-args.nce_wt_decay)
+            loss = ce_loss + nce_wt * nce_loss
         else:
             loss = ce_loss
 
@@ -209,16 +218,18 @@ if __name__ == "__main__":
     parser.add_argument('--bn_adapt', action='store_false', help='Whether to first finetune mu and std in BN layers')
     parser.add_argument('--lp_type', type=float, default=0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
     parser.add_argument('--T_decay', type=float, default=0.8, help='Temperature decay for creating pseudo-label')
-    parser.add_argument('--nce_wt', type=float, default=1.0, help='weight for nce loss')
     parser.add_argument('--feat_type', type=str, default='cls', choices=['cls', 'teacher', 'student'])
+    parser.add_argument('--nce_wt', type=float, default=1.0, help='weight for nce loss')
+    parser.add_argument('--nce_wt_decay', type=float, default=5.0, help='0.0:no decay, larger value faster decay')
+
+    parser.add_argument('--cls_type', type=str, default='ori', choices=['ori', 'r', 'd', 'rd'])
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')
-
     parser.add_argument('--k', type=int, default=5, help='number of neighbors for label propagation')
 
     parser.add_argument('--output', type=str, default='result/')
-    parser.add_argument('--exp_name', type=str, default='moco_wt1_pn5_mocoB2')
+    parser.add_argument('--exp_name', type=str, default='moco_nce5_pn5')
     parser.add_argument('--data_trans', type=str, default='W')
     args = parser.parse_args()
 

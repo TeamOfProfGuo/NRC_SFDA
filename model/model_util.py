@@ -28,6 +28,7 @@ def compute_acc(labels, preds):
     classwise_acc = ' '.join(classwise_acc)
     return acc, classwise_acc
 
+
 def extract_feature_labels(loader, netF, netB, netC, args, log, epoch=0, isMT = False):
     netF.eval()
     netB.eval()
