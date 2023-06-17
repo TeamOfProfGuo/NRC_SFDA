@@ -76,18 +76,19 @@ for i, d in enumerate(sorted(file_lst)):
     if len(after_label) == 0 or exp_id is None or len(after_ft) == 0:
         continue
     else:
-        # pdb.set_trace()
-        if max_after_ft > max_after_label:
-            try:
-                results = [exp_id, str(after_label[max_after_ft_idx]), str(max_after_ft), 'True']
-            except:
-                results = [exp_id, str(after_label[max_after_ft_idx-1]), str(max_after_ft), 'True']
+        # only want macc > 86 ones
+        if max_after_label > 86 or max_after_label > 86:
+            if max_after_ft > max_after_label:
+                try:
+                    results = [exp_id, str(after_label[max_after_ft_idx]), str(max_after_ft), 'True']
+                except:
+                    results = [exp_id, str(after_label[max_after_ft_idx-1]), str(max_after_ft), 'True']
 
-        else:
-            try:
-                results = [exp_id, str(max_after_label), str(after_ft[max_after_label_idx]), 'False']
-            except:
-                results = [exp_id, str(max_after_label), str(after_ft[max_after_label_idx-1]), 'False']
+            else:
+                try:
+                    results = [exp_id, str(max_after_label), str(after_ft[max_after_label_idx]), 'False']
+                except:
+                    results = [exp_id, str(max_after_label), str(after_ft[max_after_label_idx-1]), 'False']
 
     # print results
     print(' '.join(pad_string(results, column_size)))

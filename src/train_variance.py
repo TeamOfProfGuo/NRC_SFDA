@@ -65,7 +65,7 @@ class Trainer(object):
         self.model = moco.MoCo(self.netF, self.netB, self.netC, dim=128, K=4096, m=0.999, T=0.07, mlp=True).to(self.device)
 
         param_group = [
-            {'params': self.model.netF.parameters(), 'lr': self.args.lr, 'lr_scale': 0.5},
+            {'params': self.model.netF.parameters(), 'lr': self.args.lr, 'lr_scale': 1},
             {'params': self.model.projection_layer.parameters(), 'lr': self.args.lr, 'lr_scale': 1},
             {'params': self.model.netB.parameters(), 'lr': self.args.lr, 'lr_scale': 1},
             {'params': self.model.netC.parameters(), 'lr': self.args.lr, 'lr_scale': 1}
@@ -81,7 +81,8 @@ class Trainer(object):
         batch_time = time.time()
 
         for iter_num, batch_data in enumerate(self.dataloaders["target_moco"]):
-            adjust_learning_rate(self.optimizer, iter_num / len(self.dataloaders["target_moco"]) + epoch, self.args)
+            if epoch < self.args.warmup_epochs:
+                adjust_learning_rate(self.optimizer, (iter_num+1)/len(self.dataloaders["target_moco"]) + epoch, self.args)
 
             img_tar, _, tar_idx, plabel, _ = batch_data  # weight: [b]
 
@@ -95,8 +96,9 @@ class Trainer(object):
 
             logit_tar = self.model(img_tar[0])
             prob_tar = nn.Softmax(dim=1)(logit_tar)
-
-            max_prob, pred_label = prob_tar.max(dim=1)
+            
+            # we treat pseudo label to be its true label
+            prob = torch.gather(prob_tar, 1, plabel.unsqueeze(1)).squeeze().detach()  # detach to not involve in further gradient backward
 
             start = iter_num*img_tar[0].shape[0]
             end = (iter_num+1)*img_tar[0].shape[0]
@@ -104,31 +106,27 @@ class Trainer(object):
             # first epoch
             if epoch == 0:
                 if iter_num == 0:
-                    self.avg_prob = max_prob   # [b]
-                    self.avg_label = pred_label  # [b]
+                    self.avg_prob = prob   # [b]
                     self.probs = torch.zeros((len(self.dataloaders["target_moco"])*img_tar[0].shape[0], 1)).cuda()
                 else:
-                    self.avg_prob = torch.cat((self.avg_prob, max_prob), dim=0)
-                    self.avg_label = torch.cat((self.avg_label, pred_label), dim=0)
+                    self.avg_prob = torch.cat((self.avg_prob, prob), dim=0)
             # other epochs
             else:
                 # initialize the matrix for recording the probs
                 if iter_num == 0:
                     self.probs = torch.cat((self.probs, torch.zeros((len(self.dataloaders["target_moco"])*img_tar[0].shape[0], 1)).cuda()), dim=1)
-                # running average of the predicted label
-                self.avg_label[start:end] = self.args.momentum*pred_label + (1-self.args.momentum)*self.avg_label[start:end]
                 # running average of the max probability
-                self.avg_prob[start:end] = self.args.momentum*max_prob + (1-self.args.momentum)*self.avg_prob[start:end]
+                self.avg_prob[start:end] = self.args.momentum*prob + (1-self.args.momentum)*self.avg_prob[start:end]
 
             # record the probs
-            self.probs[start:end, epoch] = max_prob
+            self.probs[start:end, epoch] = prob
 
             # computer the variance
             if epoch == 0:
-                variance = torch.ones(img_tar[0].shape[0])
+                # first epoch we give it constant variance
+                variance = torch.ones(img_tar[0].shape[0]) * 0.5
             else:
-                variance = (self.probs[start:end, :]-self.avg_label[start:end].unsqueeze(1))**2
-                variance = (torch.sum(variance, dim=1) / epoch) ** 0.5
+                variance = torch.var(self.probs[start:end], dim=1)
 
             # get the confidence score base on variance
             confidence = 1 - F.sigmoid(variance)   # bigger variance gets lower confidence
@@ -189,7 +187,7 @@ class Trainer(object):
 
 
     def train(self):
-        # do not do these when 
+        # do not do these when testing
         if not self.args.test:
             # performance of original model
             Log.info("Checking the performance of the original model")
@@ -214,10 +212,10 @@ class Trainer(object):
             # pred_probs: [55388, 12]   feats: [55388, 257]    labels: [55388]
             pred_labels, pred_probs = label_propagation(pred_probs, feats, labels, args, alpha=0.99, max_iter=20)
 
-            # # select the confident logits
-            # threshold = self.get_threshold(epoch, self.args.init_seudolabel_ep+self.args.add_aggreg_ep)
-            # logits = torch.gather(torch.from_numpy(pred_probs), 1, torch.from_numpy(pred_labels).unsqueeze(1)).squeeze()
-            # idx = torch.where(logits > threshold)
+            # select the confident logits
+            threshold = self.get_threshold(epoch, self.args.init_seudolabel_ep+self.args.add_aggreg_ep)
+            logits = torch.gather(torch.from_numpy(pred_probs), 1, torch.from_numpy(pred_labels).unsqueeze(1)).squeeze()
+            idx = torch.where(logits > threshold)
 
             # modify data loader: (1) add pseudo label to moco data loader
             self.reset_data_load(pred_probs, select_idx=None, moco_load=True)
@@ -225,8 +223,9 @@ class Trainer(object):
             acc_tar, all_feats = self.finetune_one_epoch(epoch, get_acc=True)
             # self.finetune_one_epoch(epoch, get_acc=True)
 
-            # step scheduler only works for the init adapt period
-            self.scheduler.step()
+            # # step scheduler only works for the init adapt period
+            if epoch >= self.args.warmup_epochs:
+                self.scheduler.step()
             
             Log.info('Current lr is netF: {:.6f}, netB: {:.6f}, netC: {:.6f}'.format(
                 self.optimizer.param_groups[0]['lr'], self.optimizer.param_groups[1]['lr'], self.optimizer.param_groups[2]['lr']))

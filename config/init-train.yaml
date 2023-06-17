@@ -31,7 +31,7 @@ OPT:
   lr: 0.003  # 0.01 
   blr: 0.00015
   min_lr: 0.000001   # 1e-06
-  warmup_epochs: 4
+  warmup_epochs: 2
   loss_type: sce
   loss_wt: True   # whether to use weighted CE/SCE loss
   use_ncc: False   # whether to apply NCC in the feature extraction process
