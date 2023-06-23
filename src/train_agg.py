@@ -193,7 +193,8 @@ class Trainer(object):
 
         for iter_num, batch_data in enumerate(self.dataloaders["target_moco"]):
             # after adding the aggregator, we use per iter half cycle cosine scheduler
-            adjust_learning_rate(self.optimizer, iter_num / len(self.dataloaders["target_moco"]) + epoch, self.args)
+            if epoch < self.args.warmup_epochs:
+                adjust_learning_rate(self.optimizer, (iter_num+1)/len(self.dataloaders["target_moco"]) + epoch, self.args)
 
             img_tar, _, tar_idx, plabel, weight = batch_data
 

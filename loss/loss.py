@@ -119,3 +119,39 @@ def compute_loss(targets, pred, type='ce', reduction='mean', weight=None, cls_we
     loss = loss.sum() / batch_size
 
     return loss
+
+
+def compute_loss_selfie(targets, pred, type='ce', reduction='mean', weight=None, cls_weight=False):
+    batch_size, num_cls = pred.size()
+    if targets.ndim < 2:
+        ones = torch.eye(num_cls, device=pred.device)
+        soft_targets = torch.index_select(ones, dim=0, index=targets)
+    else:
+        soft_targets = targets
+
+    # isn't it actually hard label?
+    if type == 'ce':
+        loss = cross_entropy(soft_targets, pred, reduction=reduction)
+    elif type == 'sce':
+        loss_criterion = SCELoss()
+        loss = loss_criterion(soft_targets, pred, reduction=reduction)
+
+    if weight is not None:
+        loss = loss * weight
+
+    if cls_weight:
+        # initialize the cls wise weight
+        cls_weights = torch.zeros(batch_size).cuda()
+        # get the counts of different labels
+        counts = targets.unique(return_counts=True)
+        # iterate through the exist lables in the current batch
+        for label_idx in range(counts[0].shape[0]):
+            label = counts[0][label_idx]
+            cls_weights[torch.where(targets==label)] = 1 / counts[1][label_idx]
+
+        loss = loss * cls_weights
+    
+    return loss
+
+
+

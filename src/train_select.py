@@ -76,7 +76,7 @@ class Trainer(object):
 
 
     def finetune_one_epoch(self, epoch, get_acc=True):
-        # self.model.train()
+        self.model.train()
         start_time = time.time()
         batch_time = time.time()
 
@@ -94,61 +94,32 @@ class Trainer(object):
             plabel = plabel.cuda()
             # weight = weight.cuda()
 
-            logit_tar = self.model(img_tar[0])
-            prob_tar = nn.Softmax(dim=1)(logit_tar)
-            
-            # we treat pseudo label to be its true label
-            prob = torch.gather(prob_tar, 1, plabel.unsqueeze(1)).squeeze().detach()  # detach to not involve in further gradient backward
+            logit_tar0 = self.model(img_tar[0])
+            prob_tar0 = nn.Softmax(dim=1)(logit_tar0)
+            logit_tar1 = self.model(img_tar[1])
+            prob_tar1 = nn.Softmax(dim=1)(logit_tar1)  # [B, K]
 
-            start = iter_num*img_tar[0].shape[0]
-            end = (iter_num+1)*img_tar[0].shape[0]
+            logit_tar0, logit_tar1 = None, None
 
-            # first epoch
-            if epoch == 0:
-                if iter_num == 0:
-                    self.avg_prob = prob   # [b]
-                    self.probs = torch.zeros((len(self.dataloaders["target_moco"])*img_tar[0].shape[0], 1)).cuda()
-                else:
-                    self.avg_prob = torch.cat((self.avg_prob, prob), dim=0)
-            # other epochs
-            else:
-                # initialize the matrix for recording the probs
-                if iter_num == 0:
-                    self.probs = torch.cat((self.probs, torch.zeros((len(self.dataloaders["target_moco"])*img_tar[0].shape[0], 1)).cuda()), dim=1)
-                # running average of the max probability
-                self.avg_prob[start:end] = self.args.momentum*prob + (1-self.args.momentum)*self.avg_prob[start:end]
-
-            # record the probs
-            self.probs[start:end, epoch] = prob
-
-            # computer the variance
-            if epoch == 0:
-                # first epoch we give it constant variance
-                variance = torch.ones(img_tar[0].shape[0]) * 0.5
-            else:
-                variance = torch.var(self.probs[start:end], dim=1)
-
-            # get the confidence score base on variance
-            confidence = 1 - F.sigmoid(variance)   # bigger variance gets lower confidence
+            # prob_dist = torch.abs(prob_tar1.detach() - prob_tar0.detach()).sum(dim=1) # [B]
+            prob_dist = F.cosine_similarity(prob_tar1.detach(), prob_tar0.detach()) # [B]   change to cosine similarity
+            # pdb.set_trace()
+            confidence_weight = 1 - torch.nn.functional.sigmoid(prob_dist)
 
             if args.loss_wt:
-                ce_loss = compute_loss(plabel, prob_tar, type=self.args.loss_type, reduction='none', weight=confidence.cuda(), cls_weight=False)
+                ce_loss = compute_loss(plabel, prob_tar0, type=self.args.loss_type, reduction='none', weight=confidence_weight, cls_weight=False)
             else:
-                ce_loss = compute_loss(plabel, prob_tar, type=self.args.loss_type)
+                ce_loss = compute_loss(plabel, prob_tar0, type=self.args.loss_type)
 
             if img_tar[0].size(0) == self.args.batch_size:
                 output, target, feat = self.model.moco_forward(im_q=img_tar[0], im_k=img_tar[1])
 
                 nce_loss = nn.CrossEntropyLoss()(output, target)
                 loss = ce_loss + self.args.nce_wt * nce_loss
+
+                output, target, feat = None, None, None
             else:
                 loss = ce_loss
-
-            # store the features
-            if iter_num == 0:
-                all_feats = feat
-            else:
-                all_feats = torch.cat((all_feats, feat), dim=0)
 
             # update the record of the train phase
             self.train_losses.update(loss.item(), self.args.batch_size)  # running avg of loss
@@ -183,7 +154,7 @@ class Trainer(object):
         Log.info(msg)
 
         if get_acc:
-            return mean_acc, all_feats
+            return mean_acc
 
 
     def train(self):
@@ -212,18 +183,28 @@ class Trainer(object):
             # pred_probs: [55388, 12]   feats: [55388, 257]    labels: [55388]
             pred_labels, pred_probs = label_propagation(pred_probs, feats, labels, args, alpha=0.99, max_iter=20)
 
-            # # select the confident logits
-            # threshold = self.get_threshold(epoch, self.args.init_seudolabel_ep+self.args.add_aggreg_ep)
-            # logits = torch.gather(torch.from_numpy(pred_probs), 1, torch.from_numpy(pred_labels).unsqueeze(1)).squeeze()
-            # idx = torch.where(logits > threshold)
-
+            if epoch > 3:
+                # select the confident logits
+                if self.args.thres_change == 'inc':
+                    threshold = self.get_threshold_inc(epoch, self.args.max_epochs)
+                else:
+                    threshold = self.get_threshold_dec(epoch, self.args.max_epochs)
+                logits = torch.gather(torch.from_numpy(pred_probs), 1, torch.from_numpy(pred_labels).unsqueeze(1)).squeeze()
+                idx = torch.where(logits > threshold)
+            else:
+                idx = None
+            
             # modify data loader: (1) add pseudo label to moco data loader
-            self.reset_data_load(pred_probs, select_idx=None, moco_load=True)
+            self.reset_data_load(pred_probs, select_idx=idx, moco_load=True)
 
-            acc_tar, all_feats = self.finetune_one_epoch(epoch, get_acc=True)
-            # self.finetune_one_epoch(epoch, get_acc=True)
+            # save memory usage
+            idx, feats, logits, labels = None, None, None, None
+            pred_probs, pred_labels = None, None
 
-            # # step scheduler only works for the init adapt period
+            # acc_tar = self.finetune_one_epoch(epoch, get_acc=True)
+            self.finetune_one_epoch(epoch, get_acc=True)
+
+            # step scheduler only works for the init adapt period
             if epoch >= self.args.warmup_epochs:
                 self.scheduler.step()
             
@@ -294,9 +275,15 @@ class Trainer(object):
             return accuracy, mean_ent
 
 
-    def get_threshold(self, epoch, total_epoch):
-        threshold = self.args.min_thres + (epoch+1) * (self.args.max_thres - self.args.min_thres) / total_epoch
-        return math.log(threshold) / 5
+    # threshold increase
+    def get_threshold_inc(self, epoch, total_epoch):
+        threshold = self.args.log_min_thres + epoch * (self.args.log_max_thres - self.args.log_min_thres) / total_epoch
+        return math.log(threshold)
+
+    # threshold decrease
+    def get_threshold_dec(self, epoch, total_epoch):
+        threshold = self.args.log_min_thres + epoch * (self.args.log_max_thres - self.args.log_min_thres) / total_epoch
+        return -math.log(threshold)
 
 
 
@@ -312,15 +299,16 @@ def parse_config():
     cfg['exp_id'] = args.exp_id
     return cfg
 
+
 if __name__ == "__main__":
     args = parse_config()
 
-    # entering the test mode
+    # base on the current config, do some modifications
     # test mode only compute first several batches so that debugging will be much faster
     if args.exp_name == 'test':
         args.test = True
     else:
-        args.test = False
+        args.test = False    
 
     seed = args.seed
     if seed is not None:
@@ -330,10 +318,6 @@ if __name__ == "__main__":
         torch.manual_seed(seed)
         torch.cuda.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
-
-    # deal with thresholds
-    args.max_thres = math.exp(args.max_logit_thres*5)
-    args.min_thres = math.exp(args.min_logit_thres*5)
 
     if args.dataset == 'office-home':
         names = ['Art', 'Clipart', 'Product', 'RealWorld']
@@ -369,6 +353,16 @@ if __name__ == "__main__":
     Log.info(msg)
 
     args.update()
+
+    # after the update, we do some modifications base on the configs
+    if args.thres_change == 'inc':  # threshold increase
+        # base on the threshold, do some modification
+        args.log_min_thres = math.exp(args.min_thres)
+        args.log_max_thres = math.exp(args.max_thres)
+    else:                            # threshold decrease
+        # base on the threshold, do some modification
+        args.log_min_thres = math.exp(-args.max_thres)
+        args.log_max_thres = math.exp(-args.min_thres)
 
     trainer = Trainer(args)
     trainer.train()

@@ -71,21 +71,23 @@ def data_load(args, moco_load=False):
     dsets = {}
     dset_loaders = {}
     train_bs = args.batch_size
-    txt_src = open(args.source_data_path).readlines()
+    # txt_src = open(args.source_data_path).readlines()
     txt_tar = open(args.target_data_path).readlines()
     txt_test = open(args.test_data_path).readlines()
 
-    dsize = len(txt_src)
-    tr_size = int(0.9 * dsize)
-    _, te_txt = torch.utils.data.random_split(txt_src, [tr_size, dsize - tr_size])
-    tr_txt = txt_src
+    # dsize = len(txt_src)
+    # tr_size = int(0.9 * dsize)
+    # _, te_txt = torch.utils.data.random_split(txt_src, [tr_size, dsize - tr_size])
+    # tr_txt = txt_src
 
-    dsets["source_tr"] = ImageList(tr_txt, transform=image_train(), root=os.path.dirname(args.source_data_path))
-    dset_loaders["source_tr"] = DataLoader(dsets["source_tr"], batch_size=train_bs, shuffle=True,
-                                           num_workers=args.num_workers, drop_last=False)
-    dsets["source_te"] = ImageList(te_txt, transform=image_test(), root=os.path.dirname(args.source_data_path))
-    dset_loaders["source_te"] = DataLoader(dsets["source_te"], batch_size=train_bs, shuffle=True,
-                                           num_workers=args.num_workers, drop_last=False)
+    # # source train
+    # dsets["source_tr"] = ImageList(tr_txt, transform=image_train(), root=os.path.dirname(args.source_data_path))
+    # dset_loaders["source_tr"] = DataLoader(dsets["source_tr"], batch_size=train_bs, shuffle=True,
+    #                                        num_workers=args.num_workers, drop_last=False)
+    # # source test
+    # dsets["source_te"] = ImageList(te_txt, transform=image_test(), root=os.path.dirname(args.source_data_path))
+    # dset_loaders["source_te"] = DataLoader(dsets["source_te"], batch_size=train_bs, shuffle=True,
+    #                                        num_workers=args.num_workers, drop_last=False)
 
     data_trans = TransformSW(mean, std, aug_k=1) if args.data_trans == 'SW' else image_train()
     dsets["target"] = ImageList(txt_tar, transform=data_trans, root=os.path.dirname(args.target_data_path), ret_idx=True)

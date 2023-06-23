@@ -84,7 +84,7 @@ class CfgNode(dict):
         """
         msg = "\nUpdate: \n"
 
-        update_lst = self.exp_id.split('_')  # ncew3_lp3_tdc10_sdep8_agit14_warm7
+        update_lst = self.exp_id.split('_')  # ncew3_lp3_tdc10_warm7_inc
 
         self.nce_wt = int(update_lst[0][4:]) * 0.1  # weight for nce loss
         msg += f"   nce_wt: {self.nce_wt}\n"
@@ -95,14 +95,11 @@ class CfgNode(dict):
         self.T_decay = int(update_lst[2][3:]) * 0.01  # Temperature decay for creating pseudo-label  90 * 0.01 => 0.9
         msg += f"   T_decay: {self.T_decay}\n"
 
-        # self.init_seudolabel_ep = int(update_lst[3][4:])    # epochs to initize the model to get decend pseudo label 
-        # msg += f"   init_seudolabel_ep: {self.init_seudolabel_ep}\n"
+        # self.warmup_epochs = int(update_lst[3][4:])    # warmup epochs after add the aggreagator
+        # msg += f"   warmup_epochs: {self.warmup_epochs}\n"
 
-        # self.agg_init_ep = int(update_lst[4][4:])    # epochs to initize the aggregator weights
-        # msg += f"   init_seudolabel_ep: {self.agg_init_ep}\n"
-
-        self.warmup_epochs = int(update_lst[3][4:])    # warmup epochs after add the aggreagator
-        msg += f"   warmup_epochs: {self.warmup_epochs}\n"
+        # self.thres_change = update_lst[4]     # threshold changing direction
+        # msg += f"   thres_change: {self.thres_change}\n"
 
         Log.info(msg)
 

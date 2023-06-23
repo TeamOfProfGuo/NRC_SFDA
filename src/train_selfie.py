@@ -19,8 +19,9 @@ from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 
 from models import network, moco
-from loss.loss import compute_loss
 from dataset.data_list import ImageList
+from models.modules.selfie import Selfie
+from loss.loss import compute_loss_selfie
 from dataset.data_transform import TransformSW
 from dataset.visda_data import data_load, image_train, moco_transform
 from models.utils import obtain_ncc_label, bn_adapt, label_propagation, extract_features
@@ -42,6 +43,14 @@ class Trainer(object):
         self._set_dataloader()
 
         self._set_contrastive()
+        
+        self.Selfie = Selfie(
+            args, 
+            size_of_data=len(self.dataloaders["target_moco"])*args.batch_size, 
+            num_of_classes=args.class_num, 
+            history_length=6,   # hyper param
+            threshold=0.15  # hyper param
+        )  
 
 
     def _init_base_network(self):
@@ -75,7 +84,7 @@ class Trainer(object):
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=10, gamma=0.25)
 
 
-    def finetune_one_epoch(self, epoch, get_acc=True):
+    def finetune_one_epoch(self, epoch, loss_array):
         # self.model.train()
         start_time = time.time()
         batch_time = time.time()
@@ -94,61 +103,71 @@ class Trainer(object):
             plabel = plabel.cuda()
             # weight = weight.cuda()
 
-            logit_tar = self.model(img_tar[0])
-            prob_tar = nn.Softmax(dim=1)(logit_tar)
-            
-            # we treat pseudo label to be its true label
-            prob = torch.gather(prob_tar, 1, plabel.unsqueeze(1)).squeeze().detach()  # detach to not involve in further gradient backward
+            logit_tar0 = self.model(img_tar[0])
+            prob_tar0 = nn.Softmax(dim=1)(logit_tar0)
+            logit_tar1 = self.model(img_tar[1])
+            prob_tar1 = nn.Softmax(dim=1)(logit_tar1)  # [B, K]
 
+            logit_tar0, logit_tar1 = None, None
+
+            # update prediction
             start = iter_num*img_tar[0].shape[0]
             end = (iter_num+1)*img_tar[0].shape[0]
+            self.Selfie.update_prediction(epoch, prob_tar0.detach().argmax(dim=1), start, end)
 
-            # first epoch
-            if epoch == 0:
-                if iter_num == 0:
-                    self.avg_prob = prob   # [b]
-                    self.probs = torch.zeros((len(self.dataloaders["target_moco"])*img_tar[0].shape[0], 1)).cuda()
+            if epoch >= self.args.init_sudolabel_ep:
+                # get refurbishable samples
+                refurbish, else_clean = self.Selfie.patch_clean_with_refurbishable_sample_batch(loss_array[start:end], noise_rate=0.15, start_idx=start, end_idx=end, label=plabel)
+
+                refurbish_idx, refurbish_label = refurbish
+                else_clean_idx, else_clean_label = else_clean
+
+                refurbish_label = F.one_hot(refurbish_label, num_classes=12)
+                else_clean_label = F.one_hot(else_clean_label, num_classes=12)
+            
+            # prob_dist = torch.abs(prob_tar1.detach() - prob_tar0.detach()).sum(dim=1) # [B]
+            prob_dist = F.cosine_similarity(prob_tar1.detach(), prob_tar0.detach()) # [B]   change to cosine similarity
+            confidence_weight = 1 - torch.nn.functional.sigmoid(prob_dist)   # [B]
+
+            ce_loss = compute_loss_selfie(plabel, prob_tar0, type=self.args.loss_type, reduction='none', weight=confidence_weight, cls_weight=False)
+
+            if epoch >= self.args.init_sudolabel_ep:
+                loss = 0
+                # handle the refurbish and clean sample loss
+                if len(refurbish_idx) != 0 or len(else_clean_idx) != 0:
+                    if len(refurbish_idx) != 0:
+                        refurbish_ce_loss = compute_loss_selfie(refurbish_label, prob_tar0[refurbish_idx], type=self.args.loss_type, reduction='none', weight=confidence_weight[refurbish_idx], cls_weight=False)
+                        ce_loss[refurbish_idx] = refurbish_ce_loss
+                        loss += refurbish_ce_loss.mean()
+
+                    if len(else_clean_idx) != 0:
+                        else_clean_ce_loss = compute_loss_selfie(else_clean_label, prob_tar0[else_clean_idx], type=self.args.loss_type, reduction='none', weight=confidence_weight[else_clean_idx], cls_weight=False)
+                        ce_loss[else_clean_idx] = else_clean_ce_loss
+                        loss += else_clean_ce_loss.mean()
+
+                if img_tar[0].size(0) == self.args.batch_size:
+                    output, target, feat = self.model.moco_forward(im_q=img_tar[0], im_k=img_tar[1])
+
+                    nce_loss = nn.CrossEntropyLoss(reduction='none')(output, target)  # [B]
+                    
+                    loss += self.args.nce_wt * nce_loss.mean()
+
+                    loss_array[start:end] = (ce_loss + self.args.nce_wt * nce_loss).detach()
+
                 else:
-                    self.avg_prob = torch.cat((self.avg_prob, prob), dim=0)
-            # other epochs
+                    loss_array[start:end] = ce_loss.detach()
+                    continue
+
             else:
-                # initialize the matrix for recording the probs
-                if iter_num == 0:
-                    self.probs = torch.cat((self.probs, torch.zeros((len(self.dataloaders["target_moco"])*img_tar[0].shape[0], 1)).cuda()), dim=1)
-                # running average of the max probability
-                self.avg_prob[start:end] = self.args.momentum*prob + (1-self.args.momentum)*self.avg_prob[start:end]
+                if img_tar[0].size(0) == self.args.batch_size:
+                    output, target, feat = self.model.moco_forward(im_q=img_tar[0], im_k=img_tar[1])
 
-            # record the probs
-            self.probs[start:end, epoch] = prob
-
-            # computer the variance
-            if epoch == 0:
-                # first epoch we give it constant variance
-                variance = torch.ones(img_tar[0].shape[0]) * 0.5
-            else:
-                variance = torch.var(self.probs[start:end], dim=1)
-
-            # get the confidence score base on variance
-            confidence = 1 - F.sigmoid(variance)   # bigger variance gets lower confidence
-
-            if args.loss_wt:
-                ce_loss = compute_loss(plabel, prob_tar, type=self.args.loss_type, reduction='none', weight=confidence.cuda(), cls_weight=False)
-            else:
-                ce_loss = compute_loss(plabel, prob_tar, type=self.args.loss_type)
-
-            if img_tar[0].size(0) == self.args.batch_size:
-                output, target, feat = self.model.moco_forward(im_q=img_tar[0], im_k=img_tar[1])
-
-                nce_loss = nn.CrossEntropyLoss()(output, target)
-                loss = ce_loss + self.args.nce_wt * nce_loss
-            else:
-                loss = ce_loss
-
-            # store the features
-            if iter_num == 0:
-                all_feats = feat
-            else:
-                all_feats = torch.cat((all_feats, feat), dim=0)
+                    nce_loss = nn.CrossEntropyLoss(reduction='none')(output, target)
+                    loss_array[start:end] = (ce_loss + self.args.nce_wt * nce_loss).detach()
+                    loss = (ce_loss + self.args.nce_wt * nce_loss).mean()
+                else:
+                    loss_array[start:end] = ce_loss.detach()
+                    loss = ce_loss.mean()
 
             # update the record of the train phase
             self.train_losses.update(loss.item(), self.args.batch_size)  # running avg of loss
@@ -169,11 +188,10 @@ class Trainer(object):
                 self.train_losses.reset()
 
         # validation
-        if get_acc:
-            self.model.eval()
-            if self.args.dataset == 'visda-2017':
-                mean_acc, classwise_acc, acc = self.cal_acc(self.dataloaders['test'], self.model.netF, self.model.netB, self.model.netC, flag=True)
-                Log.info('After fine-tuning | Acc: {:.2f}% | Mean Acc: {:.2f}% | '.format(acc*100, mean_acc*100) + '\n' + 'Classwise accuracy: ' + classwise_acc)
+        self.model.eval()
+        if self.args.dataset == 'visda-2017':
+            mean_acc, classwise_acc, acc = self.cal_acc(self.dataloaders['test'], self.model.netF, self.model.netB, self.model.netC, flag=True)
+            Log.info('After fine-tuning | Acc: {:.2f}% | Mean Acc: {:.2f}% | '.format(acc*100, mean_acc*100) + '\n' + 'Classwise accuracy: ' + classwise_acc)
 
         # Log info of the time
         total_time = time.time() - start_time
@@ -181,9 +199,8 @@ class Trainer(object):
         msg = f"Epoch {epoch} done | Training time {total_time_str}"
         msg += '\n\n'
         Log.info(msg)
-
-        if get_acc:
-            return mean_acc, all_feats
+        
+        return loss_array
 
 
     def train(self):
@@ -201,6 +218,8 @@ class Trainer(object):
                 self.netF, self.netB = bn_adapt(self.netF, self.netB, self.dataloaders["target"], runs=1000)
 
         Log.info("Start Training")
+        # initialize the loss array
+        loss_array = torch.zeros(len(self.dataloaders["target_moco"])*args.batch_size).cuda()
         # epochs to get decend pseudo label
         for epoch in range(self.args.max_epochs):
             Log.info('==> Init SeudoLabel | Start epoch {}'.format(epoch))
@@ -212,16 +231,14 @@ class Trainer(object):
             # pred_probs: [55388, 12]   feats: [55388, 257]    labels: [55388]
             pred_labels, pred_probs = label_propagation(pred_probs, feats, labels, args, alpha=0.99, max_iter=20)
 
-            # # select the confident logits
-            # threshold = self.get_threshold(epoch, self.args.init_seudolabel_ep+self.args.add_aggreg_ep)
-            # logits = torch.gather(torch.from_numpy(pred_probs), 1, torch.from_numpy(pred_labels).unsqueeze(1)).squeeze()
-            # idx = torch.where(logits > threshold)
-
             # modify data loader: (1) add pseudo label to moco data loader
             self.reset_data_load(pred_probs, select_idx=None, moco_load=True)
 
-            acc_tar, all_feats = self.finetune_one_epoch(epoch, get_acc=True)
-            # self.finetune_one_epoch(epoch, get_acc=True)
+            # save memory usage
+            idx, feats, logits, labels = None, None, None, None
+            pred_probs, pred_labels = None, None
+
+            loss_array = self.finetune_one_epoch(epoch, loss_array=loss_array)
 
             # # step scheduler only works for the init adapt period
             if epoch >= self.args.warmup_epochs:
@@ -314,6 +331,7 @@ def parse_config():
 
 if __name__ == "__main__":
     args = parse_config()
+    args.selfie = True
 
     # entering the test mode
     # test mode only compute first several batches so that debugging will be much faster
@@ -330,10 +348,6 @@ if __name__ == "__main__":
         torch.manual_seed(seed)
         torch.cuda.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
-
-    # deal with thresholds
-    args.max_thres = math.exp(args.max_logit_thres*5)
-    args.min_thres = math.exp(args.min_logit_thres*5)
 
     if args.dataset == 'office-home':
         names = ['Art', 'Clipart', 'Product', 'RealWorld']

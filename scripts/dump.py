@@ -83,13 +83,12 @@ for i, d in enumerate(sorted(file_lst)):
                     results = [exp_id, str(after_label[max_after_ft_idx]), str(max_after_ft), 'True']
                 except:
                     results = [exp_id, str(after_label[max_after_ft_idx-1]), str(max_after_ft), 'True']
-
             else:
                 try:
                     results = [exp_id, str(max_after_label), str(after_ft[max_after_label_idx]), 'False']
                 except:
                     results = [exp_id, str(max_after_label), str(after_ft[max_after_label_idx-1]), 'False']
 
-    # print results
-    print(' '.join(pad_string(results, column_size)))
+            # print results
+            print(' '.join(pad_string(results, column_size)))
         

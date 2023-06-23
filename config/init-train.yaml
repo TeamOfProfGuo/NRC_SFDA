@@ -7,12 +7,16 @@ TRAIN:
   max_epochs: 35
   bn_adapt: True   # whether to first finetune miu and std in BN layers
   agg_init_ep: 15    # epochs to initize the aggregator weights
-  init_seudolabel_ep: 8  # epochs to initize the model to get decend pseudo label
+  init_sudolabel_ep: 5  # epochs to initize the model to get decend pseudo label
   add_aggreg_ep: 30    # epochs after adding the aggregator of features
-  max_logit_thres: 0.4   # max threshold to select confident logits
-  min_logit_thres: 0.1   # min threshold to select confident logits
+  max_thres: 0.4   # max threshold to select confident logits
+  min_thres: 0.1   # min threshold to select confident logits
   acc_iter: 2
   momentum: 0.8
+
+EXP:
+  selfie: False
+  select: False
 
 MODLE:
   net: resnet101
@@ -25,6 +29,7 @@ MODLE:
   layer: wn
   classifier: bn
   weight_dir: weight/visda-2017
+  thres_change: inc
 
 OPT:
   weight_decay: 0.05
