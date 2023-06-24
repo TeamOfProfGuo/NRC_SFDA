@@ -13,7 +13,7 @@ pad_string = lambda x, l: [i.ljust(j) for i, j in zip(x, l)]
 dump = []
 root = f'{sys.argv[1]}'
 column_size = [50, 30, 30, 30]
-column_name = ['exp_id', 'label prop mean acc', 'finetune mean acc', 'ft > labelprop']
+column_name = ['exp_id', 'max label prop mean acc', 'max finetune mean acc', 'ft > labelprop']
 
 # def get_file_name(path):
 #     f_list = os.listdir(path)
@@ -77,18 +77,8 @@ for i, d in enumerate(sorted(file_lst)):
         continue
     else:
         # only want macc > 86 ones
-        if max_after_label > 86 or max_after_label > 86:
-            if max_after_ft > max_after_label:
-                try:
-                    results = [exp_id, str(after_label[max_after_ft_idx]), str(max_after_ft), 'True']
-                except:
-                    results = [exp_id, str(after_label[max_after_ft_idx-1]), str(max_after_ft), 'True']
-            else:
-                try:
-                    results = [exp_id, str(max_after_label), str(after_ft[max_after_label_idx]), 'False']
-                except:
-                    results = [exp_id, str(max_after_label), str(after_ft[max_after_label_idx-1]), 'False']
-
-            # print results
+        if max_after_label > 86 or max_after_ft > 86:
+            results = [exp_id, str(max_after_label), str(max_after_ft), str(max_after_ft > max_after_label)]
+            
             print(' '.join(pad_string(results, column_size)))
         

@@ -48,8 +48,8 @@ class Trainer(object):
             args, 
             size_of_data=len(self.dataloaders["target_moco"])*args.batch_size, 
             num_of_classes=args.class_num, 
-            history_length=6,   # hyper param
-            threshold=0.15  # hyper param
+            history_length=3,   # hyper param
+            threshold=0.1  # hyper param
         )  
 
 
@@ -117,7 +117,9 @@ class Trainer(object):
 
             if epoch >= self.args.init_sudolabel_ep:
                 # get refurbishable samples
-                refurbish, else_clean = self.Selfie.patch_clean_with_refurbishable_sample_batch(loss_array[start:end], noise_rate=0.15, start_idx=start, end_idx=end, label=plabel)
+                # change noise rate
+                noise_rate = 0.12 - ((0.12 - 0.09) / (self.args.max_epochs - self.args.init_sudolabel_ep)) * (epoch-self.args.init_sudolabel_ep)
+                refurbish, else_clean = self.Selfie.patch_clean_with_refurbishable_sample_batch(loss_array[start:end], noise_rate=noise_rate, start_idx=start, end_idx=end, label=plabel)
 
                 refurbish_idx, refurbish_label = refurbish
                 else_clean_idx, else_clean_label = else_clean
@@ -125,8 +127,8 @@ class Trainer(object):
                 refurbish_label = F.one_hot(refurbish_label, num_classes=12)
                 else_clean_label = F.one_hot(else_clean_label, num_classes=12)
             
-            # prob_dist = torch.abs(prob_tar1.detach() - prob_tar0.detach()).sum(dim=1) # [B]
-            prob_dist = F.cosine_similarity(prob_tar1.detach(), prob_tar0.detach()) # [B]   change to cosine similarity
+            prob_dist = torch.abs(prob_tar1.detach() - prob_tar0.detach()).sum(dim=1) # [B] 
+            # prob_dist = F.cosine_similarity(prob_tar1.detach(), prob_tar0.detach()) # [B]   change to cosine similarity
             confidence_weight = 1 - torch.nn.functional.sigmoid(prob_dist)   # [B]
 
             ce_loss = compute_loss_selfie(plabel, prob_tar0, type=self.args.loss_type, reduction='none', weight=confidence_weight, cls_weight=False)
@@ -235,8 +237,8 @@ class Trainer(object):
             self.reset_data_load(pred_probs, select_idx=None, moco_load=True)
 
             # save memory usage
-            idx, feats, logits, labels = None, None, None, None
             pred_probs, pred_labels = None, None
+            idx, feats, logits, labels = None, None, None, None
 
             loss_array = self.finetune_one_epoch(epoch, loss_array=loss_array)
 

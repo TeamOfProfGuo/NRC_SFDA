@@ -12,7 +12,7 @@ TRAIN:
   max_thres: 0.4   # max threshold to select confident logits
   min_thres: 0.1   # min threshold to select confident logits
   acc_iter: 2
-  momentum: 0.8
+  momentum: 0.85
 
 EXP:
   selfie: False

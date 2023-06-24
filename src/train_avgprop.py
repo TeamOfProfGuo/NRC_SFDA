@@ -13,7 +13,6 @@ from sklearn.metrics import confusion_matrix
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
@@ -46,8 +45,11 @@ class Trainer(object):
 
     def _init_base_network(self):
         # build model
+        # feature extractor
         self.netF = network.ResBase(res_name=self.args.net).to(self.device)
+        # bottleneck
         self.netB = network.feat_bootleneck(type=self.args.classifier, feature_dim=self.netF.in_features, bottleneck_dim=self.args.bottleneck).to(self.device)
+        # classifer
         self.netC = network.feat_classifier(type=self.args.layer, class_num=self.args.class_num, bottleneck_dim=self.args.bottleneck).to(self.device)
 
         # load net weight
@@ -65,7 +67,7 @@ class Trainer(object):
         self.model = moco.MoCo(self.netF, self.netB, self.netC, dim=128, K=4096, m=0.999, T=0.07, mlp=True).to(self.device)
 
         param_group = [
-            {'params': self.model.netF.parameters(), 'lr': self.args.lr, 'lr_scale': 1},
+            {'params': self.model.netF.parameters(), 'lr': self.args.lr, 'lr_scale': 0.5},
             {'params': self.model.projection_layer.parameters(), 'lr': self.args.lr, 'lr_scale': 1},
             {'params': self.model.netB.parameters(), 'lr': self.args.lr, 'lr_scale': 1},
             {'params': self.model.netC.parameters(), 'lr': self.args.lr, 'lr_scale': 1}
@@ -75,7 +77,7 @@ class Trainer(object):
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=10, gamma=0.25)
 
 
-    def finetune_one_epoch(self, epoch, get_acc=True):
+    def finetune_one_epoch(self, epoch):
         # self.model.train()
         start_time = time.time()
         batch_time = time.time()
@@ -84,7 +86,8 @@ class Trainer(object):
             if epoch < self.args.warmup_epochs:
                 adjust_learning_rate(self.optimizer, (iter_num+1)/len(self.dataloaders["target_moco"]) + epoch, self.args)
 
-            img_tar, _, tar_idx, plabel, _ = batch_data  # weight: [b]
+            img_tar, _, tar_idx, plabel, weight = batch_data
+
 
             if img_tar[0].size(0) == 1:
                 continue
@@ -94,61 +97,31 @@ class Trainer(object):
             plabel = plabel.cuda()
             # weight = weight.cuda()
 
-            logit_tar = self.model(img_tar[0])
-            prob_tar = nn.Softmax(dim=1)(logit_tar)
-            
-            # we treat pseudo label to be its true label
-            prob = torch.gather(prob_tar, 1, plabel.unsqueeze(1)).squeeze().detach()  # detach to not involve in further gradient backward
+            logit_tar0 = self.model(img_tar[0])
+            prob_tar0 = nn.Softmax(dim=1)(logit_tar0)
+            logit_tar1 = self.model(img_tar[1])
+            prob_tar1 = nn.Softmax(dim=1)(logit_tar1)  # [B, K]
 
-            start = iter_num*img_tar[0].shape[0]
-            end = (iter_num+1)*img_tar[0].shape[0]
+            logit_tar0, logit_tar1 = None, None
 
-            # first epoch
-            if epoch == 0:
-                if iter_num == 0:
-                    self.avg_prob = prob   # [b]
-                    self.probs = torch.zeros((len(self.dataloaders["target_moco"])*img_tar[0].shape[0], 1)).cuda()
-                else:
-                    self.avg_prob = torch.cat((self.avg_prob, prob), dim=0)
-            # other epochs
-            else:
-                # initialize the matrix for recording the probs
-                if iter_num == 0:
-                    self.probs = torch.cat((self.probs, torch.zeros((len(self.dataloaders["target_moco"])*img_tar[0].shape[0], 1)).cuda()), dim=1)
-                # running average of the max probability
-                self.avg_prob[start:end] = self.args.momentum*prob + (1-self.args.momentum)*self.avg_prob[start:end]
-
-            # record the probs
-            self.probs[start:end, epoch] = prob
-
-            # computer the variance
-            if epoch == 0:
-                # first epoch we give it constant variance
-                variance = torch.ones(img_tar[0].shape[0]) * 0.5
-            else:
-                variance = torch.var(self.probs[start:end], dim=1)
-
-            # get the confidence score base on variance
-            confidence = 1 - F.sigmoid(variance)   # bigger variance gets lower confidence
+            prob_dist = torch.abs(prob_tar1.detach() - prob_tar0.detach()).sum(dim=1) # [B]
+            # prob_dist = F.cosine_similarity(prob_tar1.detach(), prob_tar0.detach()) # [B]   change to cosine similarity
+            confidence_weight = 1 - torch.nn.functional.sigmoid(prob_dist)
 
             if args.loss_wt:
-                ce_loss = compute_loss(plabel, prob_tar, type=self.args.loss_type, reduction='none', weight=confidence.cuda(), cls_weight=False)
+                ce_loss = compute_loss(plabel, prob_tar0, type=self.args.loss_type, reduction='none', weight=confidence_weight, cls_weight=False)
             else:
-                ce_loss = compute_loss(plabel, prob_tar, type=self.args.loss_type)
+                ce_loss = compute_loss(plabel, prob_tar0, type=self.args.loss_type)
 
             if img_tar[0].size(0) == self.args.batch_size:
                 output, target, feat = self.model.moco_forward(im_q=img_tar[0], im_k=img_tar[1])
 
                 nce_loss = nn.CrossEntropyLoss()(output, target)
                 loss = ce_loss + self.args.nce_wt * nce_loss
+
+                output, target, feat = None, None, None
             else:
                 loss = ce_loss
-
-            # store the features
-            if iter_num == 0:
-                all_feats = feat
-            else:
-                all_feats = torch.cat((all_feats, feat), dim=0)
 
             # update the record of the train phase
             self.train_losses.update(loss.item(), self.args.batch_size)  # running avg of loss
@@ -157,33 +130,29 @@ class Trainer(object):
             loss.backward()
             self.optimizer.step()
 
-            # print the log info & reset the states.
-            if iter_num % (len(self.dataloaders["target_moco"]) // 4) == 0:
-                Log.info('Ep {0} Iter {1} | Total {total} iters | loss {loss.val:.4f} (avg {loss.avg:.4f}) | '
-                        'lr {3} | time {batch_time:.2f}s/{2}iters'.format(
-                    epoch, iter_num, 200,
-                    f"{self.optimizer.param_groups[0]['lr']:.7f}", 
-                    batch_time=(time.time()-batch_time), loss=self.train_losses, total=len(self.dataloaders["target_moco"])))
-                batch_time = time.time()
+            # # print the log info & reset the states.
+            # if iter_num % (len(self.dataloaders["target_moco"]) // 4) == 0:
+            #     Log.info('Ep {0} Iter {1} | Total {total} iters | loss {loss.val:.4f} (avg {loss.avg:.4f}) | '
+            #             'lr {3} | time {batch_time:.2f}s/{2}iters'.format(
+            #         epoch, iter_num, 200,
+            #         f"{self.optimizer.param_groups[0]['lr']:.7f}", 
+            #         batch_time=(time.time()-batch_time), loss=self.train_losses, total=len(self.dataloaders["target_moco"])))
+            #     batch_time = time.time()
 
-                self.train_losses.reset()
+            #     self.train_losses.reset()
 
-        # validation
-        if get_acc:
-            self.model.eval()
-            if self.args.dataset == 'visda-2017':
-                mean_acc, classwise_acc, acc = self.cal_acc(self.dataloaders['test'], self.model.netF, self.model.netB, self.model.netC, flag=True)
-                Log.info('After fine-tuning | Acc: {:.2f}% | Mean Acc: {:.2f}% | '.format(acc*100, mean_acc*100) + '\n' + 'Classwise accuracy: ' + classwise_acc)
+        # # validation
+        # self.model.eval()
+        # if self.args.dataset == 'visda-2017':
+        #     mean_acc, classwise_acc, acc = self.cal_acc(self.dataloaders['test'], self.model.netF, self.model.netB, self.model.netC, flag=True)
+        #     Log.info('After fine-tuning | Acc: {:.2f}% | Mean Acc: {:.2f}% | '.format(acc*100, mean_acc*100) + '\n' + 'Classwise accuracy: ' + classwise_acc)
 
-        # Log info of the time
-        total_time = time.time() - start_time
-        total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-        msg = f"Epoch {epoch} done | Training time {total_time_str}"
-        msg += '\n\n'
-        Log.info(msg)
-
-        if get_acc:
-            return mean_acc, all_feats
+        # # Log info of the time
+        # total_time = time.time() - start_time
+        # total_time_str = str(datetime.timedelta(seconds=int(total_time)))
+        # msg = f"Epoch {epoch} done | Training time {total_time_str}"
+        # msg += '\n\n'
+        # Log.info(msg)
 
 
     def train(self):
@@ -200,6 +169,8 @@ class Trainer(object):
                 Log.info("Adapt Batch Norm parameters")
                 self.netF, self.netB = bn_adapt(self.netF, self.netB, self.dataloaders["target"], runs=1000)
 
+        stay_iter = 3
+
         Log.info("Start Training")
         # epochs to get decend pseudo label
         for epoch in range(self.args.max_epochs):
@@ -209,23 +180,31 @@ class Trainer(object):
             else:
                 pred_labels, feats, labels, pred_probs = extract_features(self.dataloaders["test"], self.model.netF, self.model.netB, self.model.netC, self.args, epoch)
 
-            # pred_probs: [55388, 12]   feats: [55388, 257]    labels: [55388]
-            pred_labels, pred_probs = label_propagation(pred_probs, feats, labels, args, alpha=0.99, max_iter=20)
+            # moving average of pred_probs and feats
+            if epoch < self.args.init_sudolabel_ep:
+                avg_pred_probs = pred_probs
+                avg_feats = feats
 
-            # # select the confident logits
-            # threshold = self.get_threshold(epoch, self.args.init_seudolabel_ep+self.args.add_aggreg_ep)
-            # logits = torch.gather(torch.from_numpy(pred_probs), 1, torch.from_numpy(pred_labels).unsqueeze(1)).squeeze()
-            # idx = torch.where(logits > threshold)
+                # pred_probs: [55388, 12]   feats: [55388, 257]    labels: [55388]
+                pred_labels, pred_probs = label_propagation(pred_probs, feats, labels, args, alpha=0.99, max_iter=20)
+            else:
+                avg_pred_probs = avg_pred_probs * (1 - self.args.momentum) + pred_probs*self.args.momentum
+                avg_feats = feats * (1 - self.args.momentum) + feats*self.args.momentum
+                
+                # pred_probs: [55388, 12]   feats: [55388, 257]    labels: [55388]
+                pred_labels, pred_probs = label_propagation(avg_pred_probs, avg_feats, labels, args, alpha=0.99, max_iter=20)
 
             # modify data loader: (1) add pseudo label to moco data loader
             self.reset_data_load(pred_probs, select_idx=None, moco_load=True)
 
-            acc_tar, all_feats = self.finetune_one_epoch(epoch, get_acc=True)
-            # self.finetune_one_epoch(epoch, get_acc=True)
+            # save memory usage
+            pred_probs, pred_labels = None, None
+            idx, feats, logits, labels = None, None, None, None
+            
+            self.finetune_one_epoch(epoch)
 
-            # # step scheduler only works for the init adapt period
-            if epoch >= self.args.warmup_epochs:
-                self.scheduler.step()
+            # step scheduler only works for the init adapt period
+            self.scheduler.step()
             
             Log.info('Current lr is netF: {:.6f}, netB: {:.6f}, netC: {:.6f}'.format(
                 self.optimizer.param_groups[0]['lr'], self.optimizer.param_groups[1]['lr'], self.optimizer.param_groups[2]['lr']))
@@ -299,14 +278,13 @@ class Trainer(object):
         return math.log(threshold) / 5
 
 
-
 def parse_config():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', required=True, type=str, help='config file path')
     parser.add_argument('--exp_name', required=True, type=str, help='experiment name')
     parser.add_argument('--exp_id', required=True, type=str, help='config modifications')
     args = parser.parse_args()
-    cfg = load_cfg_from_cfg_file(args.config)
+    cfg = load_cfg_from_cfg_file(args.config)  # handle config file
     # update exp_name and exp_id
     cfg['exp_name'] = args.exp_name
     cfg['exp_id'] = args.exp_id
@@ -331,10 +309,6 @@ if __name__ == "__main__":
         torch.manual_seed(seed)
         torch.cuda.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
-
-    # deal with thresholds
-    args.max_thres = math.exp(args.max_logit_thres*5)
-    args.min_thres = math.exp(args.min_logit_thres*5)
 
     if args.dataset == 'office-home':
         names = ['Art', 'Clipart', 'Product', 'RealWorld']
@@ -368,7 +342,8 @@ if __name__ == "__main__":
         msg += f'   {arg}\n'
     msg += f'\n[exp_name]: {args.exp_name}\n[exp_id]: {args.exp_id}\n[save_path]: {args.save_path}\n'
     Log.info(msg)
-
+    
+    # use the exp_id to update config
     args.update()
 
     trainer = Trainer(args)

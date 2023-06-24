@@ -272,13 +272,12 @@ class Trainer(object):
             # pred_probs: [55388, 12]   feats: [55388, 257]    labels: [55388]
             pred_labels, pred_probs = label_propagation(pred_probs, feats, labels, args, alpha=0.99, max_iter=20)
 
-            # # select the confident logits
-            # threshold = self.get_threshold(epoch, self.args.init_seudolabel_ep+self.args.add_aggreg_ep)
-            # logits = torch.gather(torch.from_numpy(pred_probs), 1, torch.from_numpy(pred_labels).unsqueeze(1)).squeeze()
-            # idx = torch.where(logits > threshold)
-
             # modify data loader: (1) add pseudo label to moco data loader
             self.reset_data_load(pred_probs, select_idx=None, moco_load=True)
+
+            # save memory usage
+            pred_probs, pred_labels = None, None
+            idx, feats, logits, labels = None, None, None, None
 
             acc_tar, all_feats = self.finetune_one_epoch(epoch, get_acc=True)
 
