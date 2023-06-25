@@ -10,14 +10,14 @@ from dataset.oh_data import office_load
 def train_source(args, log):
     dset_loaders = office_load(args)
 
-    ## set base network
+    #=== set base network
     netF = network.ResBase(res_name=args.net).cuda()
     netB = network.feat_bootleneck(type='bn', feature_dim=netF.in_features, bottleneck_dim=args.bottleneck).cuda()
     netC = network.feat_classifier(type=args.layer, class_num=args.class_num, bottleneck_dim=args.bottleneck).cuda()
 
     param_group = [{'params': netF.parameters(), 'lr': args.lr},
                    {'params': netB.parameters(), 'lr': args.lr * 10},
-                   {'params': netC.parameters(),'lr': args.lr * 10}]
+                   {'params': netC.parameters(), 'lr': args.lr * 10}]
     optimizer = optim.SGD(param_group, momentum=0.9, weight_decay=5e-4, nesterov=True)
 
     acc_init = 0.0

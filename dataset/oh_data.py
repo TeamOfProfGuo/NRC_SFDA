@@ -4,7 +4,9 @@ import torchvision
 from PIL import Image
 from torchvision import transforms
 from torch.utils.data import DataLoader
-from .data_list import ImageList
+from dataset.data_list import ImageList
+from dataset.data_transform import GaussianBlur, TwoCropsTransform
+
 
 
 '''def image_train(resize_size=256, crop_size=224):
@@ -77,6 +79,35 @@ def image_test(resize_size=256, crop_size=224):
     ])
 
 
+
+moco_base_augmentation0 = [
+    transforms.RandomResizedCrop(224, scale=(0.2, 1.0)),
+    transforms.RandomApply(
+        [transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8  # not strengthened
+    ),
+    transforms.RandomGrayscale(p=0.2),
+    transforms.RandomApply([GaussianBlur(radius_min=0.1, radius_max=2.0)], p=0.5),
+    transforms.RandomHorizontalFlip(),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+]
+
+moco_base_augmentation1 = [
+    transforms.RandomResizedCrop(224, scale=(0.5, 1.0)),
+    transforms.RandomApply(
+        [transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8  # not strengthened
+    ),
+    transforms.RandomGrayscale(p=0.2),
+    transforms.RandomApply([GaussianBlur(radius_min=0.1, radius_max=2.0)], p=0.5),
+    transforms.RandomHorizontalFlip(),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+]
+
+moco_transform = TwoCropsTransform(transforms.Compose(moco_base_augmentation0),
+                                   transforms.Compose(moco_base_augmentation1))
+
+
 def make_dataset(image_list, labels):
     if labels:
         len_ = len(image_list)
@@ -104,7 +135,7 @@ def l_loader(path):
             return img.convert('L')
 
 
-def office_load(args):
+def office_load(args, ret_idx=False, ss_load=None):
     train_bs = args.batch_size
     if args.home == True:
         ss = args.dset.split('2')[0]
@@ -123,10 +154,10 @@ def office_load(args):
         t_tr = tar_list
         t_ts = tar_list
 
-        train_source = ImageList(s_tr, transform=image_train(), root='../dataset/')
-        test_source = ImageList(s_ts, transform=image_train(), root='../dataset/')
-        train_target = ImageList(t_tr, transform=image_target(), root='../dataset/')
-        test_target = ImageList(t_ts, transform=image_test(), root='../dataset/')
+        train_source = ImageList(s_tr, transform=image_train(), root='../dataset/', ret_idx=ret_idx)
+        test_source = ImageList(s_ts, transform=image_train(), root='../dataset/', ret_idx=ret_idx)
+        train_target = ImageList(t_tr, transform=image_target(), root='../dataset/', ret_idx=ret_idx)
+        test_target = ImageList(t_ts, transform=image_test(), root='../dataset/', ret_idx=ret_idx)
 
     dset_loaders = {}
     dset_loaders["source_tr"] = DataLoader(train_source,
@@ -146,7 +177,12 @@ def office_load(args):
                                         drop_last=False)
     dset_loaders["test"] = DataLoader(test_target,
                                       batch_size=train_bs * 3, #3
-                                      shuffle=True,
+                                      shuffle=False,
                                       num_workers=args.worker,
                                       drop_last=False)
+
+    if ss_load == 'moco':
+        ss_target = ImageList(tar_list, transform=moco_transform, root='../dataset/', ret_idx=True)
+        dset_loaders['target_ss'] = DataLoader(ss_target, batch_size=train_bs, shuffle=True, num_workers=args.worker, drop_last=False)
+
     return dset_loaders
