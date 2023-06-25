@@ -27,6 +27,10 @@ class MoCo(nn.Module):
         self.netF = netF
         self.netB = netB
         self.netC = netC
+        
+        self.netF_t = copy.deepcopy(netF)
+        self.netB_t = copy.deepcopy(netB)
+        self.netC_t = copy.deepcopy(netC)
 
         # create the encoders
         if mlp:
@@ -42,6 +46,11 @@ class MoCo(nn.Module):
         for param_q, param_k in zip(self.encoder_q.parameters(), self.encoder_k.parameters()):
             param_k.data.copy_(param_q.data)  # initialize
             param_k.requires_grad = False  # not update by gradient
+        for param_q, param_t in list(zip(self.netF.parameters(), self.netF_t.parameters())) + \
+                        list(zip(self.netB.parameters(), self.netB_t.parameters())) + \
+                        list(zip(self.netC.parameters(), self.netC_t.parameters())):
+            param_t.data.copy_(param_q.data)  # initialize
+            param_t.requires_grad = False  # not update by gradient
 
         # create the queue
         self.register_buffer("queue", torch.randn(dim, K))
@@ -55,6 +64,16 @@ class MoCo(nn.Module):
         """
         for param_q, param_k in zip(self.encoder_q.parameters(), self.encoder_k.parameters()):
             param_k.data = param_k.data * self.m + param_q.data * (1.0 - self.m)
+    
+    @torch.no_grad()
+    def _momentum_update_teacher(self):
+        """
+        Momentum update of the teacher branch
+        """
+        for param_q, param_t in list(zip(self.netF.parameters(), self.netF_t.parameters())) + \
+                        list(zip(self.netB.parameters(), self.netB_t.parameters())) + \
+                        list(zip(self.netC.parameters(), self.netC_t.parameters())):
+            param_t.data = param_t.data * self.m + param_q.data * (1.0 - self.m)
 
     @torch.no_grad()
     def _dequeue_and_enqueue(self, keys):

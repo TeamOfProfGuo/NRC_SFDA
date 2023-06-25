@@ -52,10 +52,6 @@ def analysis_target(args):
     netB.load_state_dict(torch.load(modelpath))
     modelpath = args.output_dir_src + '/source_C.pt'
     netC.load_state_dict(torch.load(modelpath))
-    netC_copy = copy.deepcopy(netC)
-
-    if args.cls_type == 'rd':
-        netC.reset_rd(with_rl=True, with_dr=True)
 
     # ========== performance of original model ==========
     mean_acc, classwise_acc, acc = cal_acc(dset_loaders["target"], netF, netB, netC, flag=True)
@@ -82,17 +78,24 @@ def analysis_target(args):
     for epoch in range(1, args.max_epoch+1):
         log('==> Start epoch {}'.format(epoch))
 
-        if epoch == 1:
-            pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"], netF, netB, netC_copy, args, log, epoch)
-        else:
-            model.eval()
+        model.eval()
+        if args.lp_branch == 't': 
+            pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"], model.netF_t, model.netB_t, model.netC_t, args, log, epoch)
+        else: 
             pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"], model.netF, model.netB, model.netC, args, log, epoch)
-            if args.feat_type == 'cls':
-                pass
-            elif args.feat_type == 'student':
-                feats = extract_features(dset_loaders["test"], model.encoder_q, args)
-            elif args.feat_type == 'teacher':
-                feats = extract_features(dset_loaders["test"], model.encoder_k, args)
+        if args.feat_type == 'cls':
+            pass
+        elif args.feat_type == 'student':
+            feats = extract_features(dset_loaders["test"], model.encoder_q, args)
+        elif args.feat_type == 'teacher':
+            feats = extract_features(dset_loaders["test"], model.encoder_k, args)
+            
+        Z = torch.zeros(len(dset_loaders['target'].dataset), args.class_num).float().numpy()        # intermediate values
+        z = torch.zeros(len(dset_loaders['target'].dataset), args.class_num).float().numpy()        # temporal outputs
+        if (args.lp_ma > 0.0) and (args.lp_ma<1.0):  # if lp_ma=0 or lp_ma=1, then no moving avg
+            Z = args.lp_ma * Z + (1. - args.lp_ma) * pred_probs
+            z = Z * (1. / (1. - args.lp_ma ** epoch))
+            pred_probs = z
             
         pred_labels, pred_probs = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20)
 
@@ -165,6 +168,8 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
         ce_loss1 =  compute_loss(plabel, prob_tar1, type=args.loss_type, weight=weight, cls_weight=cls_weight)
         ce_loss =  2.0 * ce0_wt * ce_loss0 + 2.0 * ce1_wt * ce_loss1
         
+        model._momentum_update_teacher()
+        
         # if iter_num == 0 and epoch == 1:
         #     log('pred0 {}, pred1 {}'.format(prob_tar0[0].cpu().detach().numpy(), prob_tar1[0].cpu().detach().numpy()))
         #     log('{} weight {}'.format('entropy' if args.loss_wt[0]=='e' else 'confidence',
@@ -220,9 +225,11 @@ if __name__ == "__main__":
     parser.add_argument('--T_decay', type=float, default=0.8, help='Temperature decay for creating pseudo-label')
     parser.add_argument('--feat_type', type=str, default='cls', choices=['cls', 'teacher', 'student'])
     parser.add_argument('--nce_wt', type=float, default=1.0, help='weight for nce loss')
-    parser.add_argument('--nce_wt_decay', type=float, default=5.0, help='0.0:no decay, larger value faster decay')
+    parser.add_argument('--nce_wt_decay', type=float, default=0.0, help='0.0:no decay, larger value faster decay')
 
     parser.add_argument('--cls_type', type=str, default='ori', choices=['ori', 'r', 'd', 'rd'])
+    parser.add_argument('--lp_branch', type=str, default='s', choices=['s', 't'], help='whether to use the momentum encoder model')
+    parser.add_argument('--lp_ma', type=float, default=0.0, help='label used for LP is based on MA or not')
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')
