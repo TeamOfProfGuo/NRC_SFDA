@@ -86,26 +86,33 @@ class SCELoss(torch.nn.Module):
         return loss
 
 
-def compute_loss(targets, pred, type='ce', reduction='mean', weight=None, cls_weight=None, rce_weight=None):
+def compute_loss(targets, pred, type='ce', reduction='mean', weight=None, cls_weight=None, rce_weight=None, soft_flag=False):
     batch_size, num_cls = pred.size()
     if targets.ndim < 2:
         ones = torch.eye(num_cls, device=pred.device)
-        soft_targets = torch.index_select(ones, dim=0, index=targets)
-        hard_targets = targets
+        targets_2d = torch.index_select(ones, dim=0, index=targets)
+        targets_1d = targets
+        if soft_flag: # no soft label to use
+            print('Warning: no soft_label provided')
     else:
-        soft_targets = targets
-        hard_targets = soft_targets.argmax(dim=1)
+        targets_2d = targets
+        targets_1d = targets_2d.argmax(dim=1)
+        if not soft_flag:  # use hard label
+            ones = torch.eye(num_cls, device=pred.device)
+            targets_2d = torch.index_select(ones, dim=0, index=targets_1d)
 
     if type == 'ce':
-        loss = cross_entropy(soft_targets, pred, reduction=reduction)
+        loss = cross_entropy(targets_2d, pred, reduction=reduction)
     elif type == 'sce':
         loss_criterion = SCELoss()
-        loss = loss_criterion(soft_targets, pred, reduction=reduction, rce_weight = rce_weight)
+        loss = loss_criterion(targets_2d, pred, reduction=reduction, rce_weight = rce_weight)
+    elif type == 'dot' or type == 'dot_d':
+        loss = torch.sum(- targets_2d * pred, 1)
 
     if weight is not None:
         loss = loss * weight
     if cls_weight is not None: 
-        elementwise_weight = cls_weight[hard_targets]
+        elementwise_weight = cls_weight[targets_1d]
         loss = loss * elementwise_weight
         
     loss = loss.sum() / batch_size

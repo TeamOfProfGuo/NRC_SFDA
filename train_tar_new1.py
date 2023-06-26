@@ -61,15 +61,12 @@ def analysis_target(args):
 
     for epoch in range(1, args.max_epoch+1):
         log('==> Start epoch {}'.format(epoch))
-        if args.use_ncc:
-            pred_labels, feats, labels, pred_probs = obtain_ncc_label(dset_loaders["test"], netF, netB, netC, args, log)
-        else:
-            pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"], netF, netB, netC, args, log, epoch)
+        pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"], netF, netB, netC, args, log, epoch)
 
         pred_labels, pred_probs = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20)
         reset_data_load(dset_loaders, pred_probs, args)
 
-        acc_tar = finetune_one_epoch(netF, netB, netC, dset_loaders, optimizer)
+        acc_tar = finetune_one_epoch(netF, netB, netC, dset_loaders, optimizer, epoch=epoch)
 
 
         # how about LR
@@ -88,12 +85,13 @@ def analysis_target(args):
                        osp.join(args.output_dir, "target_C_" + today.strftime("%Y%m%d") + ".pt"))
 
 
-def finetune_one_epoch(netF, netB, netC, dset_loaders, optimizer):
+def finetune_one_epoch(netF, netB, netC, dset_loaders, optimizer, epoch):
 
     # ======================== start training / adaptation
     netF.train()
     netB.train()
     netC.train()
+    max_iter = args.max_epoch * len(dset_loaders["target"])
 
     for iter_num, batch_data in enumerate(dset_loaders["target"]):
         input_tar, _, tar_idx, plabel, weight = batch_data
@@ -110,9 +108,24 @@ def finetune_one_epoch(netF, netB, netC, dset_loaders, optimizer):
         prob_tar = nn.Softmax(dim=1)(logit_tar)
 
         if args.loss_wt:
-            loss = compute_loss(plabel, prob_tar, type=args.loss_type, weight=weight)
+            loss = compute_loss(plabel, prob_tar, type=args.loss_type, weight=weight, soft_flag=args.plabel_soft)
         else:
-            loss = compute_loss(plabel, prob_tar, type=args.loss_type)
+            loss = compute_loss(plabel, prob_tar, type=args.loss_type, soft_flag=args.plabel_soft)
+
+        if args.loss_type == 'dot_d':
+            mask = torch.ones((prob_tar.shape[0], prob_tar.shape[0]))
+            diag_num = torch.diag(mask)
+            mask_diag = torch.diag_embed(diag_num)
+            mask = mask - mask_diag  # square matrix with only diagonal matrix = 0
+
+            copy = prob_tar.T  # .detach().clone()# [c, batch]
+            dot_neg = prob_tar @ copy  # batch x batch
+            dot_neg = (dot_neg * mask.cuda()).sum(-1)  # batch
+            neg_pred = torch.mean(dot_neg)
+
+            curr_iter = iter_num + len(dset_loaders["target"]) * (epoch-1)
+            alpha = (1 + 10 * curr_iter / max_iter) ** (-args.beta) * 1.0
+            loss += neg_pred * alpha
 
         optimizer.zero_grad()
         loss.backward()
@@ -146,13 +159,14 @@ if __name__ == "__main__":
     parser.add_argument('--bottleneck', type=int, default=256)
     parser.add_argument('--layer', type=str, default="wn", choices=["linear", "wn"])
     parser.add_argument('--classifier', type=str, default="bn", choices=["ori", "bn"])
-    parser.add_argument('--loss_type', type=str, default='sce', help='Loss function for target domain adaptation')
+    parser.add_argument('--loss_type', type=str, default='sce', help='Loss function', choices=['ce', 'sce', 'dot', 'dot_d'])
     parser.add_argument('--loss_wt', action='store_false', help='Whether to use weighted CE/SCE loss')
-    parser.add_argument('--use_ncc', action='store_true', help='Whether to apply NCC in the feature extraction process')
+    parser.add_argument('--plabel_soft', action='store_true', help='Whether to use soft/hard pseudo label')
+    parser.add_argument("--beta", type=float, default=5.0)
+
     parser.add_argument('--bn_adapt', action='store_false', help='Whether to first finetune mu and std in BN layers')
     parser.add_argument('--lp_type', type=float, default=0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
     parser.add_argument('--T_decay', type=float, default=0.8, help='Temperature decay for creating pseudo-label')
-
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'cosine1' 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')
@@ -163,6 +177,9 @@ if __name__ == "__main__":
     parser.add_argument('--exp_name', type=str, default='LP_cosine')
     parser.add_argument('--data_trans', type=str, default='W')
     args = parser.parse_args()
+
+    if args.loss_type == 'dot' or args.loss_type == 'dot_d':
+        args.plabel_soft = True
 
     if args.dset == 'office-home':
         names = ['Art', 'Clipart', 'Product', 'RealWorld']

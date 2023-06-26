@@ -45,7 +45,7 @@ class ImageList(Dataset):
             entropy = scipy.stats.entropy(pprob, axis=1)
             weights = 1 - entropy / np.log(args.class_num)
             self.weights = weights / np.max(weights)
-            self.plabel = np.argmax(pprob, 1)
+            self.plabel = pprob # np.argmax(pprob, 1)
 
         self.imgs = imgs
         self.transform = transform

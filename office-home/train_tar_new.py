@@ -141,7 +141,7 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
         cls_weight = torch.tensor(cls_weight).cuda()
 
     for iter_num, batch_data in enumerate(dset_loaders["target_ss"]):
-        img_tar, _, tar_idx, plabel, weight = batch_data
+        img_tar, _, tar_idx, plabel, weight = batch_data   # plabel is soft prob
 
         if img_tar[0].size(0) == 1:
             continue
@@ -210,7 +210,7 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Domain Adaptation on office-home dataset')
-    parser.add_argument('--home', action='store_true')
+    parser.add_argument('--home', action='store_false')
     parser.add_argument('--gpu_id',  type=str, nargs='?', default='0', help="device id to run")
     parser.add_argument('--s', type=int, default=0, help="source")
     parser.add_argument('--t', type=int, default=1, help="target")
