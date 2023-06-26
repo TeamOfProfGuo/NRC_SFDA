@@ -77,12 +77,12 @@ def analysis_target(args):
         if acc_tar > MAX_TEXT_ACC:
             MAX_TEXT_ACC = acc_tar
             today = date.today()
-            torch.save(netF.state_dict(),
-                       osp.join(args.output_dir, "target_F_" + today.strftime("%Y%m%d") + ".pt"))
-            torch.save(netB.state_dict(),
-                       osp.join(args.output_dir, "target_B_" + today.strftime("%Y%m%d") + ".pt"))
-            torch.save(netC.state_dict(),
-                       osp.join(args.output_dir, "target_C_" + today.strftime("%Y%m%d") + ".pt"))
+            # torch.save(netF.state_dict(),
+            #            osp.join(args.output_dir, "target_F_" + today.strftime("%Y%m%d") + ".pt"))
+            # torch.save(netB.state_dict(),
+            #            osp.join(args.output_dir, "target_B_" + today.strftime("%Y%m%d") + ".pt"))
+            # torch.save(netC.state_dict(),
+            #            osp.join(args.output_dir, "target_C_" + today.strftime("%Y%m%d") + ".pt"))
 
 
 def finetune_one_epoch(netF, netB, netC, dset_loaders, optimizer, epoch):
@@ -159,7 +159,7 @@ if __name__ == "__main__":
     parser.add_argument('--bottleneck', type=int, default=256)
     parser.add_argument('--layer', type=str, default="wn", choices=["linear", "wn"])
     parser.add_argument('--classifier', type=str, default="bn", choices=["ori", "bn"])
-    parser.add_argument('--loss_type', type=str, default='sce', help='Loss function', choices=['ce', 'sce', 'dot', 'dot_d'])
+    parser.add_argument('--loss_type', type=str, default='dot', help='Loss function', choices=['ce', 'sce', 'dot', 'dot_d'])
     parser.add_argument('--loss_wt', action='store_false', help='Whether to use weighted CE/SCE loss')
     parser.add_argument('--plabel_soft', action='store_true', help='Whether to use soft/hard pseudo label')
     parser.add_argument("--beta", type=float, default=5.0)
@@ -174,7 +174,7 @@ if __name__ == "__main__":
     parser.add_argument('--k', type=int, default=5, help='number of neighbors for label propagation')
 
     parser.add_argument('--output', type=str, default='result/')
-    parser.add_argument('--exp_name', type=str, default='LP_cosine')
+    parser.add_argument('--exp_name', type=str, default='LP_cosine_Dot')
     parser.add_argument('--data_trans', type=str, default='W')
     args = parser.parse_args()
 

@@ -20,5 +20,6 @@ singularity exec --nv \
 --overlay ${ext3_path}:ro \
 ${sif_path} /bin/bash -c "
 source /ext3/env.sh
-python train_tar_new2.py --cls_type ori --lp_ma 0.5 --exp_name moco_wt1_pn5_lpMA5
+python train_tar_new1.py
 "
+# --cls_type ori --lp_ma 0.5 --exp_name moco_wt1_pn5_lpMA5

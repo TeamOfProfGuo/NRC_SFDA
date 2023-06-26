@@ -194,23 +194,22 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
         optimizer.step()
 
     model.eval()
-    if args.dset == 'visda-2017':
-        mean_acc, classwise_acc, acc, cm = cal_acc(dset_loaders['test'], model.netF, model.netB, model.netC,
-                                                   flag=True, ret_cm=True)
-        log('After fine-tuning, Acc: {:.2f}%, Mean Acc: {:.2f}%,'.format(acc * 100, mean_acc * 100) +
-            '\n' + 'Classwise accuracy: ' + classwise_acc)
+    mean_acc, classwise_acc, acc, cm = cal_acc(dset_loaders['test'], model.netF, model.netB, model.netC,
+                                                flag=True, ret_cm=True)
+    log('After fine-tuning, Acc: {:.2f}%, Mean Acc: {:.2f}%,'.format(acc * 100, mean_acc * 100) +
+        '\n' + 'Classwise accuracy: ' + classwise_acc)
 
-        if epoch == 1 or epoch == 5:
-            log('confusion matrix')
-            for line in cm:
-                log(' '.join(str(e) for e in line))
+    # if epoch == 1 or epoch == 5:
+    #     log('confusion matrix')
+    #     for line in cm:
+    #         log(' '.join(str(e) for e in line))
 
     return mean_acc
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Domain Adaptation on office-home dataset')
-    parser.add_argument('--home', action='store_true')
+    parser.add_argument('--home', action='store_false')
     parser.add_argument('--gpu_id',  type=str, nargs='?', default='0', help="device id to run")
     parser.add_argument('--s', type=int, default=0, help="source")
     parser.add_argument('--t', type=int, default=1, help="target")
@@ -222,6 +221,8 @@ if __name__ == "__main__":
     parser.add_argument('--choice', type=str, default='shot')
     parser.add_argument('--lr', type=float, default=0.01, help="learning rate")
     parser.add_argument('--seed', type=int, default=2021, help="random seed")
+    
+    parser.add_argument('--net', type=str, default='resnet101', help="resnet50, resnet101")
     parser.add_argument('--class_num', type=int, default=65)
     parser.add_argument('--bottleneck', type=int, default=256)
     parser.add_argument('--layer', type=str, default="wn", choices=["linear", "wn"])
@@ -241,10 +242,10 @@ if __name__ == "__main__":
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')
-    parser.add_argument('--k', type=int, default=2, help='number of neighbors for label propagation')
+    parser.add_argument('--k', type=int, default=3, help='number of neighbors for label propagation')
 
     parser.add_argument('--output', type=str, default='result/')
-    parser.add_argument('--exp_name', type=str, default='moco_nce5_pn5')
+    parser.add_argument('--exp_name', type=str, default='moco_nce5_pn5_k3')
 
     args = parser.parse_args()
 
