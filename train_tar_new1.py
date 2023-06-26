@@ -124,8 +124,8 @@ def finetune_one_epoch(netF, netB, netC, dset_loaders, optimizer, epoch):
             neg_pred = torch.mean(dot_neg)
 
             curr_iter = iter_num + len(dset_loaders["target"]) * (epoch-1)
-            alpha = (1 + 10 * curr_iter / max_iter) ** (-args.beta) * 1.0
-            loss += neg_pred * alpha
+            alpha = (1 + 10 * curr_iter / max_iter) ** (-args.beta) * args.alpha
+            loss += neg_pred * alpha / args.k
 
         optimizer.zero_grad()
         loss.backward()
@@ -163,6 +163,7 @@ if __name__ == "__main__":
     parser.add_argument('--loss_wt', action='store_false', help='Whether to use weighted CE/SCE loss')
     parser.add_argument('--plabel_soft', action='store_true', help='Whether to use soft/hard pseudo label')
     parser.add_argument("--beta", type=float, default=5.0)
+    parser.add_argument("--alpha", type=float, default=1.0)
 
     parser.add_argument('--bn_adapt', action='store_false', help='Whether to first finetune mu and std in BN layers')
     parser.add_argument('--lp_type', type=float, default=0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")

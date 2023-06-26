@@ -233,7 +233,7 @@ def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20
             y[cur_idx] = 1.0 / cur_idx.shape[0]
         else:
             y = pred_label[:, i] / np.sum(pred_label[:, i])
-        f, _ = scipy.sparse.linalg.cg(A, y, tol=1e-6, maxiter=max_iter)
+        f, _ = scipy.sparse.linalg.cg(A, y, tol=1e-6, maxiter=max_iter)   # Use Conjugate Gradient iteration to solve Ax = b
         Z[:, i] = f
 
     # Handle numberical errors
