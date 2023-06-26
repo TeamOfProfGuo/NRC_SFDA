@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from model import network, moco
 from dataset.data_list import ImageList
 from dataset.visda_data import data_load, image_train, moco_transform
-from model.model_util import obtain_ncc_label, bn_adapt, label_propagation, extract_feature_labels, extract_features
+from model.model_util import bn_adapt, label_propagation, extract_feature_labels, extract_features
 from model.loss import compute_loss
 from dataset.data_transform import TransformSW
 from utils import cal_acc, print_args, log, set_log_path
@@ -159,6 +159,8 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
             prob_dist = torch.abs(prob_tar1.detach() - prob_tar0.detach()).sum(dim=1) # [B]
             confidence_weight = 1 - torch.nn.functional.sigmoid(prob_dist)
             weight = confidence_weight
+        elif args.loss_wt[0] == 'n':
+            weight = None
         
         if args.loss_wt[1] == 'c': 
             pass 
@@ -166,10 +168,10 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
             cls_weight = None
             
         ce0_wt, ce1_wt = float(args.loss_wt[2])/10, 1-float(args.loss_wt[2])/10
-        
-        ce_loss0 =  compute_loss(plabel, prob_tar0, type=args.loss_type, weight=weight, cls_weight=cls_weight)
-        ce_loss1 =  compute_loss(plabel, prob_tar1, type=args.loss_type, weight=weight, cls_weight=cls_weight)
-        ce_loss =  2.0 * ce0_wt * ce_loss0 + 2.0 * ce1_wt * ce_loss1
+
+        ce_loss0 = compute_loss(plabel, prob_tar0, type=args.loss_type, weight=weight, cls_weight=cls_weight, soft_flag=args.plabel_soft)
+        ce_loss1 = compute_loss(plabel, prob_tar1, type=args.loss_type, weight=weight, cls_weight=cls_weight, soft_flag=args.plabel_soft)
+        ce_loss = 2.0 * ce0_wt * ce_loss0 + 2.0 * ce1_wt * ce_loss1
         
         model._momentum_update_teacher()
         
@@ -221,14 +223,19 @@ if __name__ == "__main__":
     parser.add_argument('--bottleneck', type=int, default=256)
     parser.add_argument('--layer', type=str, default="wn", choices=["linear", "wn"])
     parser.add_argument('--classifier', type=str, default="bn", choices=["ori", "bn"])
-    parser.add_argument('--loss_type', type=str, default='sce', help='Loss function for target domain adaptation')
-    parser.add_argument('--loss_wt', type=str, default='pn5', help='CE/SCE loss weight: e|p|n, c|n, 0-9')
     parser.add_argument('--bn_adapt', action='store_false', help='Whether to first finetune mu and std in BN layers')
+
     parser.add_argument('--lp_type', type=float, default=0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
-    parser.add_argument('--T_decay', type=float, default=0.8, help='Temperature decay for creating pseudo-label')
+    parser.add_argument('--T_decay', type=float, default=0.8, help='Temperature decay of creating pseudo-label in feature extraction')
     parser.add_argument('--feat_type', type=str, default='cls', choices=['cls', 'teacher', 'student'])
     parser.add_argument('--nce_wt', type=float, default=1.0, help='weight for nce loss')
     parser.add_argument('--nce_wt_decay', type=float, default=0.0, help='0.0:no decay, larger value faster decay')
+
+    parser.add_argument('--loss_type', type=str, default='dot', help='Loss function', choices=['ce', 'sce', 'dot', 'dot_d'])
+    parser.add_argument('--loss_wt', type=str, default='en5', help='CE/SCE loss weight: e|p|n, c|n (classwise weight), 0-9')
+    parser.add_argument('--plabel_soft', action='store_false', help='Whether to use soft/hard pseudo label')
+    parser.add_argument("--beta", type=float, default=5.0)
+    parser.add_argument("--alpha", type=float, default=1.0)
 
     parser.add_argument('--cls_type', type=str, default='ori', choices=['ori', 'r', 'd', 'rd'])
     parser.add_argument('--lp_branch', type=str, default='s', choices=['s', 't'], help='whether to use the momentum encoder model')
@@ -242,6 +249,9 @@ if __name__ == "__main__":
     parser.add_argument('--exp_name', type=str, default='moco_nce5_pn5')
     parser.add_argument('--data_trans', type=str, default='W')
     args = parser.parse_args()
+
+    if args.loss_type == 'dot' or args.loss_type == 'dot_d':
+        args.plabel_soft = True
 
     if args.dset == 'office-home':
         names = ['Art', 'Clipart', 'Product', 'RealWorld']
