@@ -35,9 +35,9 @@ def reset_data_load(dset_loaders, pred_prob, args, moco_load=False):
     else:
         dset_loaders['target'] = dloader
     
-    label_inique, label_cnt = np.unique(dsets.plabel, return_counts=True)
-    log('Pseudo label count: ' + 
-        ', '.join([ '{} : {}'.format(k, v) for k, v in zip(label_inique, label_cnt) ]) )
+    # label_inique, label_cnt = np.unique(dsets.plabel, return_counts=True)
+    # log('Pseudo label count: ' + 
+    #     ', '.join([ '{} : {}'.format(k, v) for k, v in zip(label_inique, label_cnt) ]) )
 
 def analysis_target(args):
     dset_loaders = data_load(args, ss_load='moco')
