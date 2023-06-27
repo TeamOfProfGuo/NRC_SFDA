@@ -163,6 +163,12 @@ def finetune_one_epoch(netF, netB, netC, dset_loaders, optimizer, epoch=None):
         ce_loss1 = compute_loss(plabel, prob_tar1, type=args.loss_type, weight=weight, cls_weight=cls_weight, soft_flag=args.plabel_soft)
         ce_loss = 2.0 * ce0_wt * ce_loss0 + 2.0 * ce1_wt * ce_loss1
 
+        if img_tar[0].size(0) == args.batch_size:
+            if args.extra_forward == 0:
+                feat = netF(img_tar[0])
+            elif args.extra_forward == 1:
+                feat = netF(img_tar[1])
+
         # if iter_num == 0 and epoch == 1:
         #     log('pred0 {}, pred1 {}'.format(prob_tar0[0].cpu().detach().numpy(), prob_tar1[0].cpu().detach().numpy()))
         #     log('{} weight {}'.format('entropy' if args.loss_wt[0]=='e' else 'confidence',
@@ -218,6 +224,7 @@ if __name__ == "__main__":
     parser.add_argument('--plabel_soft', action='store_false', help='Whether to use soft/hard pseudo label')
     parser.add_argument("--beta", type=float, default=5.0)
     parser.add_argument("--alpha", type=float, default=1.0)
+    parser.add_argument('--extra_forward', type=int, default=-1, choices=[0, 1, -1], help='Whether to apply another forward pass')
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')
