@@ -159,3 +159,23 @@ class MoCo(nn.Module):
         out = self.netB(self.netF(img))
         out = self.netC(out)
         return out
+
+
+class UniModel(nn.Module):
+    def __init__(self, netF, netB, netC, ):
+        """
+        dim: feature dimension (default: 128)
+        K: queue size; number of negative keys (default: 65536)
+        m: moco momentum of updating key encoder (default: 0.999)
+        T: softmax temperature (default: 0.07)
+        """
+        super(UniModel, self).__init__()
+
+        self.netF = netF
+        self.netB = netB
+        self.netC = netC
+
+    def forward(self, img):
+        out = self.netB(self.netF(img))
+        out = self.netC(out)
+        return out
