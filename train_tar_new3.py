@@ -42,7 +42,7 @@ def analysis_target(args):
     modelpath = args.output_dir_src + '/source_C.pt'
     netC.load_state_dict(torch.load(modelpath))
 
-    param_group = [{'params': netF.parameters(), 'lr': args.lr * 0.1},
+    param_group = [{'params': netF.parameters(), 'lr': args.lr * 0.5},
                    {'params': netB.parameters(), 'lr': args.lr * 1},
                    {'params': netC.parameters(), 'lr': args.lr * 1}]
 

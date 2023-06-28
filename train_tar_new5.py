@@ -67,7 +67,6 @@ def analysis_target(args):
     model = model.cuda()
 
     param_group = [{'params': model.netF.parameters(), 'lr': args.lr * 0.5},
-                   {'params': model.projection_layer.parameters(), 'lr': args.lr * 1},
                    {'params': model.netB.parameters(), 'lr': args.lr * 1},
                    {'params': model.netC.parameters(), 'lr': args.lr * 1}]
 
