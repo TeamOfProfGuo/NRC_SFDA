@@ -23,7 +23,7 @@ def reset_data_load(dset_loaders, pred_prob, args):
     modify the target data loader to return both image and pseudo label
     """
     txt_tar = open(args.t_dset_path).readlines()
-    data_trans = moco_transform
+    data_trans = moco_transform(args.data_aug)
     dsets_target = ImageList(txt_tar, transform=data_trans, root=os.path.dirname(args.t_dset_path), ret_idx=True, pprob=pred_prob, ret_plabel=True, args=args)
     dset_loaders["target"] = DataLoader(dsets_target, batch_size=args.batch_size, shuffle=True, num_workers=args.worker, drop_last=False)
 
@@ -158,6 +158,7 @@ if __name__ == "__main__":
     parser.add_argument('--plabel_soft', action='store_true', help='Whether to use soft/hard pseudo label')
     parser.add_argument("--beta", type=float, default=5.0)
     parser.add_argument("--alpha", type=float, default=1.0)
+    parser.add_argument('--data_aug', type=str, default='0.2,0.5', help='delimited list input')
 
     parser.add_argument('--bn_adapt', action='store_false', help='Whether to first finetune mu and std in BN layers')
     parser.add_argument('--lp_type', type=float, default=0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
@@ -168,9 +169,11 @@ if __name__ == "__main__":
     parser.add_argument('--k', type=int, default=5, help='number of neighbors for label propagation')
 
     parser.add_argument('--output', type=str, default='result/')
-    parser.add_argument('--exp_name', type=str, default='LPaug_ce5_dot')
+    parser.add_argument('--exp_name', type=str, default='LPaug_ce5_dot_aug25')
     parser.add_argument('--data_trans', type=str, default='W')
     args = parser.parse_args()
+
+    args.data_aug = [float(v) for v in args.data_aug.split(',')]
 
     if args.loss_type == 'dot' or args.loss_type == 'dot_d':
         args.plabel_soft = True

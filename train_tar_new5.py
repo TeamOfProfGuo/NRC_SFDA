@@ -25,7 +25,7 @@ def reset_data_load(dset_loaders, pred_prob, args, moco_load=False):
     """
     txt_tar = open(args.t_dset_path).readlines()
     if moco_load:
-        data_trans = moco_transform
+        data_trans = moco_transform()
     else:
         data_trans = TransformSW(mean, std, aug_k=1) if args.data_trans == 'SW' else image_train()
     dsets = ImageList(txt_tar, transform=data_trans, root=os.path.dirname(args.t_dset_path), ret_idx=True, pprob=pred_prob, ret_plabel=True, args=args)
