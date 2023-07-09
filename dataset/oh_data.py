@@ -182,7 +182,7 @@ def office_load(args, ret_idx=False, ss_load=None):
                                       drop_last=False)
 
     if ss_load == 'moco':
-        ss_target = ImageList(tar_list, transform=moco_transform, root='../dataset/', ret_idx=True)
-        dset_loaders['target_ss'] = DataLoader(ss_target, batch_size=train_bs, shuffle=True, num_workers=args.worker, drop_last=False)
+        data_target = ImageList(tar_list, transform=moco_transform, root='../dataset/', ret_idx=True)
+        dset_loaders['target_ss'] = DataLoader(data_target, batch_size=train_bs, shuffle=True, num_workers=args.worker, drop_last=False)
 
     return dset_loaders
