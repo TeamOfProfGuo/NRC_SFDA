@@ -180,13 +180,13 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
         #     log('{} weight {}'.format('entropy' if args.loss_wt[0]=='e' else 'confidence',
         #                               weight[0:5].cpu().numpy()))
 
-        # if img_tar[0].size(0) == args.batch_size:
-        #     output, target = model.moco_forward(im_q=img_tar[0], im_k=img_tar[1])  # query, key
-        #     nce_loss = nn.CrossEntropyLoss()(output, target)
-        #     nce_wt = args.nce_wt * (1+(epoch-1)/args.max_epoch) ** (-args.nce_wt_decay)
-        #     loss = ce_loss + nce_wt * nce_loss
-        # else:
-        loss = ce_loss
+        if img_tar[0].size(0) == args.batch_size:
+            output, target = model.moco_forward(im_q=img_tar[0], im_k=img_tar[1])  # query, key
+            nce_loss = nn.CrossEntropyLoss()(output, target)
+            nce_wt = args.nce_wt * (1+(epoch-1)/args.max_epoch) ** (-args.nce_wt_decay)
+            loss = ce_loss + nce_wt * nce_loss
+        else:
+            loss = ce_loss
 
         optimizer.zero_grad()
         loss.backward()

@@ -25,7 +25,7 @@ def reset_data_load(dset_loaders, pred_prob, args, moco_load=False):
     """
     txt_tar = open(args.t_dset_path).readlines()
     if moco_load:
-        data_trans = moco_transform()
+        data_trans = moco_transform(min_scales=args.data_aug)
     else:
         data_trans = TransformSW(mean, std, aug_k=1) if args.data_trans == 'SW' else image_train()
     dsets = ImageList(txt_tar, transform=data_trans, root=os.path.dirname(args.t_dset_path), ret_idx=True, pprob=pred_prob, ret_plabel=True, args=args)
@@ -81,8 +81,8 @@ def analysis_target(args):
         model.eval()
         pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"], model.netF, model.netB, model.netC, args, log, epoch)
             
-        Z = torch.zeros(len(dset_loaders['target'].dataset), args.class_num).float().numpy()        # intermediate values
-        z = torch.zeros(len(dset_loaders['target'].dataset), args.class_num).float().numpy()        # temporal outputs
+        Z = torch.zeros(len(dset_loaders['target'].dataset), args.class_num).float().numpy()       # intermediate values
+        z = torch.zeros(len(dset_loaders['target'].dataset), args.class_num).float().numpy()       # temporal outputs
         if (args.lp_ma > 0.0) and (args.lp_ma<1.0):  # if lp_ma=0 or lp_ma=1, then no moving avg
             Z = args.lp_ma * Z + (1. - args.lp_ma) * pred_probs
             z = Z * (1. / (1. - args.lp_ma ** epoch))
@@ -225,6 +225,7 @@ if __name__ == "__main__":
     parser.add_argument('--plabel_soft', action='store_false', help='Whether to use soft/hard pseudo label')
     parser.add_argument("--beta", type=float, default=5.0)
     parser.add_argument("--alpha", type=float, default=1.0)
+    parser.add_argument('--data_aug', type=str, default='0.2,0.5', help='delimited list input')
 
     parser.add_argument('--lp_ma', type=float, default=0.0, help='label used for LP is based on MA or not')
 
@@ -237,6 +238,10 @@ if __name__ == "__main__":
     parser.add_argument('--data_trans', type=str, default='W')
     args = parser.parse_args()
 
+    if args.data_aug != 'null':
+        args.data_aug = [float(v) for v in args.data_aug.split(',')]
+    else:
+        args.data_aug = None
     if args.loss_type == 'dot' or args.loss_type == 'dot_d':
         args.plabel_soft = True
 
