@@ -20,5 +20,5 @@ singularity exec --nv \
 --overlay ${ext3_path}:ro \
 ${sif_path} /bin/bash -c "
 source /ext3/env.sh
-python train_tar_new2.py --loss_type dot --nce_wt 0.00001 --loss_wt en5 --exp_name moco_wt401_en5_dot
+python train_tar_new5.py --loss_type dot --loss_wt en5 --data_aug null  --exp_name unim1_en5_dot_augn
 "

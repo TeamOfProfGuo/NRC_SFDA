@@ -57,7 +57,9 @@ def analysis_target(args):
     mean_acc, classwise_acc, acc = cal_acc(dset_loaders["target"], netF, netB, netC, flag=True)
     log("Source model accuracy on target domain: {:.2f}%".format(mean_acc*100) + '\nClasswise accuracy: {}'.format(classwise_acc))
 
-    MAX_TEXT_ACC = mean_acc
+    FT_MAX_ACC, FT_MAX_MEAN_ACC = acc, mean_acc
+    LP_MAX_ACC, LP_MAX_MEAN_ACC = acc, mean_acc
+    
     if args.bn_adapt:
         log("Adapt Batch Norm parameters")
         netF, netB = bn_adapt(netF, netB, dset_loaders["target"], runs=1000)
@@ -89,21 +91,25 @@ def analysis_target(args):
             pred_probs = z
 
         # ============ label propagation ============
-        pred_labels, pred_probs = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20)
+        pred_labels, pred_probs, mean_acc, acc = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20, ret_acc=True)
+        if mean_acc > LP_MAX_MEAN_ACC: 
+            LP_MAX_ACC = acc
+            LP_MAX_MEAN_ACC = mean_acc
 
         # modify data loader: (1) add pseudo label to moco data loader
         reset_data_load(dset_loaders, pred_probs, args, moco_load=True)
 
         # ============ model finetuning ============
-        acc_tar = finetune_one_epoch(model, dset_loaders, optimizer, epoch)
+        mean_acc, acc = finetune_one_epoch(model, dset_loaders, optimizer, epoch)
 
         # how about LR
         scheduler.step()
         log('Current lr is netF: {:.6f}, netB: {:.6f}, netC: {:.6f}'.format(
             optimizer.param_groups[0]['lr'], optimizer.param_groups[1]['lr'], optimizer.param_groups[2]['lr']))
 
-        if acc_tar > MAX_TEXT_ACC:
-            MAX_TEXT_ACC = acc_tar
+        if mean_acc > FT_MAX_MEAN_ACC:
+            FT_MAX_MEAN_ACC = mean_acc
+            FT_MAX_ACC = acc
             today = date.today()
             # torch.save(netF.state_dict(),
             #            osp.join(args.output_dir, "target_F_" + today.strftime("%Y%m%d") + ".pt"))
@@ -111,6 +117,8 @@ def analysis_target(args):
             #            osp.join(args.output_dir, "target_B_" + today.strftime("%Y%m%d") + ".pt"))
             # torch.save(netC.state_dict(),
             #            osp.join(args.output_dir, "target_C_" + today.strftime("%Y%m%d") + ".pt"))
+        log('------LP_MAX_ACC={:.2f}%, LP_MAX_MEAN_ACC={:.2f}%, FT_MAX_ACC={:.2f}%, FT_MAX_MEAN_ACC={:.2f}% '.format(
+            LP_MAX_ACC * 100, LP_MAX_MEAN_ACC * 100, FT_MAX_ACC * 100, FT_MAX_MEAN_ACC * 100))
 
 
 def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
@@ -191,7 +199,7 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
             for line in cm: 
                 log(' '.join(str(e) for e in line))
 
-    return mean_acc
+    return mean_acc, acc
 
 
 

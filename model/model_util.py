@@ -183,7 +183,7 @@ def bn_adapt(netF, netB, data_loader, runs=10):
     return netF, netB
 
 
-def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20):
+def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20, ret_acc=False):
     """
     Args:
         pred_label: current predicted label
@@ -230,7 +230,7 @@ def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20
         if args.lp_type == 0:
             y = np.zeros((N,))
             cur_idx = np.where(pred_label==i)[0]   # pred_label [N]
-            y[cur_idx] = 1.0 / cur_idx.shape[0]
+            y[cur_idx] = 1.0 / (cur_idx.shape[0] + 1e-10)
         else:
             y = pred_label[:, i] / np.sum(pred_label[:, i])
         f, _ = scipy.sparse.linalg.cg(A, y, tol=1e-6, maxiter=max_iter)   # Use Conjugate Gradient iteration to solve Ax = b
@@ -247,7 +247,11 @@ def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20
     new_acc = float(np.sum(new_pred == label)) / len(label)
     mean_acc, _ = compute_acc(label, new_pred)
     log('After label propagation Acc: {:.2f}%, Mean Acc: {:.2f}%'.format(new_acc*100, mean_acc*100))
-    return new_pred, probs_l1
+    
+    if ret_acc:
+        return new_pred, probs_l1, mean_acc, new_acc
+    else: 
+        return new_pred, probs_l1
 
 
 class SubBatchNorm2d(nn.Module):

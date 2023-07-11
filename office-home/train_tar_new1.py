@@ -1,5 +1,6 @@
 
 import sys
+import pdb
 sys.path.append('./')
 
 import os.path as osp
@@ -41,8 +42,8 @@ def reset_data_load(dset_loaders, pred_prob, args, ss_load=None):
         dset_loaders['target'] = dloader
 
     label_inique, label_cnt = np.unique(data_target.plabel, return_counts=True)
-    log('Pseudo label count: ' +
-        ', '.join(['{} : {}'.format(k, v) for k, v in zip(label_inique, label_cnt)]))
+    # log('Pseudo label count: ' +
+    #     ', '.join(['{} : {}'.format(k, v) for k, v in zip(label_inique, label_cnt)]))
 
 
 def train_target(args):
@@ -65,7 +66,9 @@ def train_target(args):
     log("Source model accuracy on target domain: {:.2f}%".format(mean_acc * 100) +
         '\nClasswise accuracy: {}'.format(classwise_acc))
 
-    MAX_TEXT_ACC = mean_acc
+    FT_MAX_ACC, FT_MAX_MEAN_ACC = acc, mean_acc
+    LP_MAX_ACC, LP_MAX_MEAN_ACC = acc, mean_acc
+    
     if args.bn_adapt:
         log("Adapt Batch Norm parameters")
         netF, netB = bn_adapt(netF, netB, dset_loaders["target"], runs=1000)
@@ -105,20 +108,25 @@ def train_target(args):
             pred_probs = z
 
         # ====== label propagation ======
-        pred_labels, pred_probs = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20)
+        pred_labels, pred_probs, mean_acc, acc = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20, ret_acc=True)
+        if acc > LP_MAX_ACC: 
+            LP_MAX_ACC = acc
+            LP_MAX_MEAN_ACC = mean_acc
 
         # modify data loader: (1) add pseudo label to moco data loader
         reset_data_load(dset_loaders, pred_probs, args, ss_load='moco')
 
-        acc_tar = finetune_one_epoch(model, dset_loaders, optimizer, epoch)
+        mean_acc, acc = finetune_one_epoch(model, dset_loaders, optimizer, epoch)
 
         # how about LR
         scheduler.step()
         log('Current lr is netF: {:.6f}, netB: {:.6f}, netC: {:.6f}'.format(
             optimizer.param_groups[0]['lr'], optimizer.param_groups[1]['lr'], optimizer.param_groups[2]['lr']))
 
-        if acc_tar > MAX_TEXT_ACC:
-            MAX_TEXT_ACC = acc_tar
+        if acc > FT_MAX_ACC:
+            FT_MAX_ACC = acc
+            FT_MAX_MEAN_ACC = mean_acc
+        
             today = date.today()
             # torch.save(netF.state_dict(),
             #            osp.join(args.output_dir, "target_F_" + today.strftime("%Y%m%d") + ".pt"))
@@ -126,6 +134,9 @@ def train_target(args):
             #            osp.join(args.output_dir, "target_B_" + today.strftime("%Y%m%d") + ".pt"))
             # torch.save(netC.state_dict(),
             #            osp.join(args.output_dir, "target_C_" + today.strftime("%Y%m%d") + ".pt"))
+        log('------LP_MAX_ACC={:.2f}%, LP_MAX_MEAN_ACC={:.2f}%, FT_MAX_ACC={:.2f}%, FT_MAX_MEAN_ACC={:.2f}% '.format(
+            LP_MAX_ACC * 100, LP_MAX_MEAN_ACC * 100, FT_MAX_ACC * 100, FT_MAX_MEAN_ACC * 100))
+        
 
 
 def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
@@ -163,6 +174,8 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
             prob_dist = torch.abs(prob_tar1.detach() - prob_tar0.detach()).sum(dim=1)  # [B]
             confidence_weight = 1 - torch.nn.functional.sigmoid(prob_dist)
             weight = confidence_weight
+        elif args.loss_wt[1] == 'n':
+            weight = None
 
         if args.loss_wt[1] == 'c':
             pass
@@ -170,6 +183,8 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
             cls_weight = None
 
         ce0_wt, ce1_wt = float(args.loss_wt[2]) / 10, 1 - float(args.loss_wt[2]) / 10
+        
+        
 
         ce_loss0 = compute_loss(plabel, prob_tar0, type=args.loss_type, weight=weight, cls_weight=cls_weight)
         ce_loss1 = compute_loss(plabel, prob_tar1, type=args.loss_type, weight=weight, cls_weight=cls_weight)
@@ -205,7 +220,7 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
     #     for line in cm:
     #         log(' '.join(str(e) for e in line))
 
-    return mean_acc
+    return mean_acc, acc
 
 
 if __name__ == "__main__":
@@ -274,6 +289,9 @@ if __name__ == "__main__":
 
     args.output_dir_src = osp.join('result/home/source/seed2021/', args.dset[0])
     args.output_dir = osp.join(args.output, 'home', args.exp_name, args.dset)
+    if os.path.exists(args.output_dir):                             # if output_dir already exists, reset it
+        print('remove the existing folder {}'.format(args.output_dir))
+        shutil.rmtree(args.output_dir)
     if not osp.exists(args.output_dir):
         os.makedirs(args.output_dir)
     set_log_path(args.output_dir)
