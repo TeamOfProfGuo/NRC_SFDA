@@ -52,7 +52,7 @@ class Solarization(object):
 
 
 class TransformSW(object):
-    def __init__(self, mean, std, resize=256, crop_size=224, aug_k=1):
+    def __init__(self, mean, std, resize=256, crop_size=224):
         self.weak = transforms.Compose([
             transforms.RandomHorizontalFlip(),
             transforms.Resize((resize, resize)),

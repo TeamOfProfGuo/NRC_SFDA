@@ -24,10 +24,12 @@ def reset_data_load(dset_loaders, pred_prob, args, moco_load=False):
     modify the target data loader to return both image and pseudo label
     """
     txt_tar = open(args.t_dset_path).readlines()
-    if moco_load:
+    if args.data_trans == 'moco':
         data_trans = moco_transform(min_scales=args.data_aug)
+    elif args.data_trans == 'sw':
+        data_trans = TransformSW(mean, std)
     else:
-        data_trans = TransformSW(mean, std, aug_k=1) if args.data_trans == 'SW' else image_train()
+        data_trans = image_train()
     dsets = ImageList(txt_tar, transform=data_trans, root=os.path.dirname(args.t_dset_path), ret_idx=True, pprob=pred_prob, ret_plabel=True, args=args)
     dloader = DataLoader(dsets, batch_size=args.batch_size, shuffle=True, num_workers=args.worker, drop_last=False)
     if moco_load:
