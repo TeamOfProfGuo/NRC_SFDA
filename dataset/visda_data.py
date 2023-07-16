@@ -76,6 +76,24 @@ def moco_transform(min_scales=None):
                                  transforms.Compose(get_moco_base_augmentation1(min_scales[1])))
 
 
+def mm_transform(min_scales=None):
+    if min_scales is None:
+        m_scale = 0.5
+    else:
+        m_scale = min_scales[0]
+
+    return TwoCropsTransform(
+        transforms.Compose(get_moco_base_augmentation0()),
+        transforms.Compose([
+            transforms.RandomResizedCrop(224, scale=(m_scale, 1.0)),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+    )
+
+
+
 def data_load(args, ss_load=None):
     ## prepare data
     dsets = {}

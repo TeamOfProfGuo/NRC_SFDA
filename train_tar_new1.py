@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 
 from model import network
 from dataset.data_list import ImageList
-from dataset.visda_data import data_load, image_train
+from dataset.visda_data import data_load, image_train, get_moco_base_augmentation0
 from model.model_util import obtain_ncc_label, bn_adapt, label_propagation, extract_feature_labels
 from model.loss import compute_loss
 from dataset.data_transform import TransformSW
@@ -23,7 +23,12 @@ def reset_data_load(dset_loaders, pred_prob, args):
     modify the target data loader to return both image and pseudo label
     """
     txt_tar = open(args.t_dset_path).readlines()
-    data_trans = TransformSW(mean, std, aug_k=1) if args.data_trans == 'SW' else image_train()
+    if args.data_trans == 'sw':
+        data_trans = TransformSW(mean, std, aug_k=1)
+    elif args.data_trans == 'moco':
+        data_trans = get_moco_base_augmentation0()   # random resized crop : 0.2~1
+    else:
+        data_trans = image_train()
     dsets_target = ImageList(txt_tar, transform=data_trans, root=os.path.dirname(args.t_dset_path), ret_idx=True, pprob=pred_prob, ret_plabel=True, args=args)
     dset_loaders["target"] = DataLoader(dsets_target, batch_size=args.batch_size, shuffle=True, num_workers=args.worker, drop_last=False)
 
@@ -176,7 +181,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--output', type=str, default='result/')
     parser.add_argument('--exp_name', type=str, default='LP_cosine_Dot')
-    parser.add_argument('--data_trans', type=str, default='W')
+    parser.add_argument('--data_trans', type=str, default='w')
     args = parser.parse_args()
 
     if args.loss_type == 'dot' or args.loss_type == 'dot_d':
