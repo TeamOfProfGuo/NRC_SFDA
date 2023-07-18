@@ -38,9 +38,9 @@ def reset_data_load(dset_loaders, pred_prob, args, moco_load=False):
         dset_loaders['target_moco'] = dloader
     else:
         dset_loaders['target'] = dloader
-    
+
     # label_inique, label_cnt = np.unique(dsets.plabel, return_counts=True)
-    # log('Pseudo label count: ' + 
+    # log('Pseudo label count: ' +
     #     ', '.join([ '{} : {}'.format(k, v) for k, v in zip(label_inique, label_cnt) ]) )
 
 def analysis_target(args):
@@ -63,7 +63,7 @@ def analysis_target(args):
 
     FT_MAX_ACC, FT_MAX_MEAN_ACC = acc, mean_acc
     LP_MAX_ACC, LP_MAX_MEAN_ACC = acc, mean_acc
-    
+
     if args.bn_adapt:
         log("Adapt Batch Norm parameters")
         netF, netB = bn_adapt(netF, netB, dset_loaders["target"], runs=1000)
@@ -86,7 +86,7 @@ def analysis_target(args):
         # ============ feature extraction ============
         model.eval()
         pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"], model.netF, model.netB, model.netC, args, log, epoch)
-            
+
         Z = torch.zeros(len(dset_loaders['target'].dataset), args.class_num).float().numpy()       # intermediate values
         z = torch.zeros(len(dset_loaders['target'].dataset), args.class_num).float().numpy()       # temporal outputs
         if (args.lp_ma > 0.0) and (args.lp_ma<1.0):  # if lp_ma=0 or lp_ma=1, then no moving avg
@@ -96,7 +96,7 @@ def analysis_target(args):
 
         # ============ label propagation ============
         pred_labels, pred_probs, mean_acc, acc = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20, ret_acc=True)
-        if mean_acc > LP_MAX_MEAN_ACC: 
+        if mean_acc > LP_MAX_MEAN_ACC:
             LP_MAX_ACC = acc
             LP_MAX_MEAN_ACC = mean_acc
 
@@ -129,7 +129,7 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
 
     # ======================== start training / adaptation
     model.train()
-    
+
     if args.loss_wt[1] == 'c':
         plabel_inique, plabel_cnt = np.unique(dset_loaders["target_moco"].dataset.plabel, return_counts=True)
         sorted_idx = np.argsort(plabel_inique)
@@ -154,28 +154,28 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
         prob_tar0 = nn.Softmax(dim=1)(logit_tar0)
         logit_tar1 = model(img_tar[1])
         prob_tar1 = nn.Softmax(dim=1)(logit_tar1)  # [B, K]
-        
+
         if args.loss_wt[0] == 'e':  # entropy weight
-            pass 
-        elif args.loss_wt[0] == 'p': 
+            pass
+        elif args.loss_wt[0] == 'p':
             prob_dist = torch.abs(prob_tar1.detach() - prob_tar0.detach()).sum(dim=1) # [B]
             confidence_weight = 1 - torch.nn.functional.sigmoid(prob_dist)
             weight = confidence_weight
         elif args.loss_wt[0] == 'n':
             weight = None
-        
-        if args.loss_wt[1] == 'c': 
-            pass 
-        else: 
+
+        if args.loss_wt[1] == 'c':
+            pass
+        else:
             cls_weight = None
-            
+
         ce0_wt, ce1_wt = float(args.loss_wt[2])/10, 1-float(args.loss_wt[2])/10
 
         ce_loss0 = compute_loss(plabel, prob_tar0, type=args.loss_type, weight=weight, cls_weight=cls_weight, soft_flag=args.plabel_soft)
         ce_loss1 = compute_loss(plabel, prob_tar1, type=args.loss_type, weight=weight, cls_weight=cls_weight, soft_flag=args.plabel_soft)
         ce_loss = 2.0 * ce0_wt * ce_loss0 + 2.0 * ce1_wt * ce_loss1
 
-        
+
         # if iter_num == 0 and epoch == 1:
         #     log('pred0 {}, pred1 {}'.format(prob_tar0[0].cpu().detach().numpy(), prob_tar1[0].cpu().detach().numpy()))
         #     log('{} weight {}'.format('entropy' if args.loss_wt[0]=='e' else 'confidence',
@@ -197,10 +197,10 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
     if args.dset == 'visda-2017':
         mean_acc, classwise_acc, acc, cm = cal_acc(dset_loaders['test'], model.netF, model.netB, model.netC, flag=True, ret_cm=True)
         log('After fine-tuning, Acc: {:.2f}%, Mean Acc: {:.2f}%,'.format(acc*100, mean_acc*100) + '\n' + 'Classwise accuracy: ' + classwise_acc)
-        
-        if epoch == 1 or epoch ==5: 
+
+        if epoch == 1 or epoch ==5:
             log('confusion matrix')
-            for line in cm: 
+            for line in cm:
                 log(' '.join(str(e) for e in line))
 
     return mean_acc, acc
@@ -247,7 +247,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--output', type=str, default='result/')
     parser.add_argument('--exp_name', type=str, default='unim_en5_dot')
-    parser.add_argument('--data_trans', type=str, default='mm')
+    parser.add_argument('--data_trans', type=str, default='moco')
     args = parser.parse_args()
 
     if args.data_aug != 'null':

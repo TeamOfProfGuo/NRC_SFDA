@@ -9,7 +9,8 @@ from model import network
 from torch.utils.data import DataLoader
 from dataset.data_list import ImageList
 from model.loss import CrossEntropyLabelSmooth
-from utils import op_copy, lr_scheduler, image_train, image_test, cal_acc, ensure_path, set_log_path, log, print_args
+from utils import op_copy, lr_scheduler, cal_acc, ensure_path, set_log_path, log, print_args
+from dataset.visda_data import image_train, image_test
 
 def data_load(args):
     ## prepare data
@@ -106,7 +107,7 @@ def train_source(args):
     netF.eval()
     netB.eval()
     netC.eval()
-    acc_s_te, acc_list = cal_acc(dset_loaders['test'], netF, netB, netC,flag= True)
+    acc_s_te, acc_list, acc = cal_acc(dset_loaders['test'], netF, netB, netC,flag= True)
 
     log('Task: {}; Target Accuracy = {:.2f}\n'.format(args.name_src, acc_s_te) + acc_list + '\n')
 
@@ -135,8 +136,8 @@ def test_target(args):
     netB.eval()
     netC.eval()
 
-    acc, acc_list = cal_acc(dset_loaders['test'], netF, netB, netC, flag=True)
-    log('====> Training: {}, Task: {}, Target Test Accuracy = {:.2f}\n'.format(args.trte, args.name, acc) + acc_list + '\n')
+    mean_acc, acc_list, acc = cal_acc(dset_loaders['test'], netF, netB, netC, flag=True)
+    log('====> Training: {}, Task: {}, Target Test Accuracy = {:.2f}\n'.format(args.trte, args.name, mean_acc) + acc_list + '\n')
 
 
 if __name__ == "__main__":

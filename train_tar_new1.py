@@ -6,6 +6,7 @@ import argparse, os, random
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torchvision import transforms
 from torch.utils.data import DataLoader
 
 from model import network
@@ -26,7 +27,7 @@ def reset_data_load(dset_loaders, pred_prob, args):
     if args.data_trans == 'sw':
         data_trans = TransformSW(mean, std, aug_k=1)
     elif args.data_trans == 'moco':
-        data_trans = get_moco_base_augmentation0()   # random resized crop : 0.2~1
+        data_trans = transforms.Compose(get_moco_base_augmentation0())   # random resized crop : 0.2~1
     else:
         data_trans = image_train()
     dsets_target = ImageList(txt_tar, transform=data_trans, root=os.path.dirname(args.t_dset_path), ret_idx=True, pprob=pred_prob, ret_plabel=True, args=args)
@@ -60,7 +61,7 @@ def analysis_target(args):
     log("Source model accuracy on target domain: {:.2f}%".format(mean_acc*100) + '\nClasswise accuracy: {}'.format(classwise_acc))
 
     MAX_TEXT_ACC = mean_acc
-    if args.bn_adapt: 
+    if args.bn_adapt:
         log("Adapt Batch Norm parameters")
         netF, netB = bn_adapt(netF, netB, dset_loaders["target"], runs=1000)
 
