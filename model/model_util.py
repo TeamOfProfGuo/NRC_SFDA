@@ -33,6 +33,14 @@ def extract_feature_labels(loader, netF, netB, netC, args, log, epoch=0, isMT = 
     netF.eval()
     netB.eval()
     netC.eval()
+
+    for m in netF.modules():
+        if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
+            m.train()
+    for m in netB.modules():
+        if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
+            m.train()
+
     temperature = args.lp_type if args.lp_type>0 else 1
     if args.lp_type > 0:
         temperature *= args.T_decay ** (epoch-0)
