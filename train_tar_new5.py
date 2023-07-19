@@ -238,6 +238,8 @@ if __name__ == "__main__":
     parser.add_argument("--beta", type=float, default=5.0)
     parser.add_argument("--alpha", type=float, default=1.0)
     parser.add_argument('--data_aug', type=str, default='0.2,0.5', help='delimited list input')
+    parser.add_argument('--w_type', type=str, default='poly', help='how to calculate weight of adjacency matrix', choices=['poly','exp'])
+    parser.add_argument('--gamma', type=float, default=1.0)
 
     parser.add_argument('--lp_ma', type=float, default=0.0, help='label used for LP is based on MA or not')
 

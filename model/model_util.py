@@ -208,7 +208,10 @@ def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20
     D, I = index.search(feat, args.k + 1)
 
     # Create the graph
-    D = D[:, 1:] ** 3  # [N, k]
+    if args.w_type == 'poly':
+        D = D[:, 1:] ** 3  # [N, k]
+    else:
+        D = np.exp( (D[:, 1:]-1) / args.gamma )
     I = I[:, 1:]
     row_idx = np.arange(N)
     row_idx_rep = np.tile(row_idx, (args.k, 1)).T
