@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from model import network, moco
 from dataset.data_list import ImageList
 from dataset.visda_data import data_load, image_train, moco_transform, mm_transform
-from model.model_util import bn_adapt, label_propagation, extract_feature_labels, extract_features
+from model.model_util import bn_adapt, bn_adapt1, label_propagation, extract_feature_labels, extract_features
 from model.loss import compute_loss
 from dataset.data_transform import TransformSW
 from utils import cal_acc, print_args, log, set_log_path
@@ -64,9 +64,14 @@ def analysis_target(args):
     FT_MAX_ACC, FT_MAX_MEAN_ACC = acc, mean_acc
     LP_MAX_ACC, LP_MAX_MEAN_ACC = acc, mean_acc
 
-    if args.bn_adapt:
+    if args.bn_adapt >= 0:  # -1 No BN adapt
         log("Adapt Batch Norm parameters")
-        netF, netB = bn_adapt(netF, netB, dset_loaders["target"], runs=1000)
+        if args.bn_adapt == 0: 
+            netF, netB = bn_adapt(netF, netB, dset_loaders["target"], runs=1000)
+        else: 
+            mom = 0.1 if args.bn_adapt==1 else None 
+            netF, netB = bn_adapt1(netF, netB, dset_loaders["target"], mom=mom)
+            
 
     # ========== Define Model with Contrastive Branch ============
     model = moco.UniModel(netF, netB, netC)
@@ -224,7 +229,8 @@ if __name__ == "__main__":
     parser.add_argument('--bottleneck', type=int, default=256)
     parser.add_argument('--layer', type=str, default="wn", choices=["linear", "wn"])
     parser.add_argument('--classifier', type=str, default="bn", choices=["ori", "bn"])
-    parser.add_argument('--bn_adapt', action='store_false', help='Whether to first finetune mu and std in BN layers')
+    parser.add_argument('--bn_adapt', type=int, default=0, help='Whether to first finetune mu and std in BN layers')
+    
 
     parser.add_argument('--lp_type', type=float, default=0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
     parser.add_argument('--T_decay', type=float, default=0.8, help='Temperature decay of creating pseudo-label in feature extraction')

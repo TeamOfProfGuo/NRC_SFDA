@@ -34,13 +34,6 @@ def extract_feature_labels(loader, netF, netB, netC, args, log, epoch=0, isMT = 
     netB.eval()
     netC.eval()
 
-    for m in netF.modules():
-        if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
-            m.train()
-    for m in netB.modules():
-        if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
-            m.train()
-
     temperature = args.lp_type if args.lp_type>0 else 1
     if args.lp_type > 0:
         temperature *= args.T_decay ** (epoch-0)
@@ -187,6 +180,36 @@ def bn_adapt(netF, netB, data_loader, runs=10):
                 m.train()
                 m.momentum = mom_new + 0.05
 
+        _ = netB(netF(inputs.cuda()))
+    return netF, netB
+
+
+def bn_adapt1(netF, netB, data_loader, mom=0.1):
+    netF.eval()
+    netB.eval()
+    if isinstance(mom, float): 
+        mom = mom  # 0.1|None
+    else: 
+        mom = None
+    print('mom for BatchNorm {}'.format(mom))
+    
+    for m in netF.modules():
+        if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
+            m.train()
+            m.momentum = mom
+    for m in netB.modules():
+        if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
+            m.train()
+            m.momentum = mom
+    
+    iter_test = iter(data_loader)
+    for _ in range(len(data_loader)):
+        data = next(iter_test)
+        inputs, label = data[0], data[1]
+        if inputs.size(0) < data_loader.batch_size:
+            print('skip last batch')
+            continue
+    
         _ = netB(netF(inputs.cuda()))
     return netF, netB
 
