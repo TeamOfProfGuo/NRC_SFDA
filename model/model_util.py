@@ -196,10 +196,12 @@ def bn_adapt1(netF, netB, data_loader, mom=0.1):
     for m in netF.modules():
         if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
             m.train()
+            m.reset_running_stats()
             m.momentum = mom
     for m in netB.modules():
         if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
             m.train()
+            m.reset_running_stats()
             m.momentum = mom
     
     iter_test = iter(data_loader)
@@ -211,6 +213,15 @@ def bn_adapt1(netF, netB, data_loader, mom=0.1):
             continue
     
         _ = netB(netF(inputs.cuda()))
+    
+    for m in netF.modules():
+        if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
+            m.train()
+            m.momentum = 0.075
+    for m in netB.modules():
+        if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
+            m.train()
+            m.momentum = 0.075
     return netF, netB
 
 
