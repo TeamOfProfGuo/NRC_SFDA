@@ -37,9 +37,11 @@ def image_test(resize_size=256, crop_size=224, alexnet=False):
     ])
 
 
-def get_moco_base_augmentation0(min_scale=None):
+def get_moco_base_augmentation0(min_scale=None, max_scale=None):
     if min_scale is None:
         min_scale = 0.2
+    if max_scale is None: 
+        max_scale = 1.0
     return [
         transforms.RandomResizedCrop(224, scale=(min_scale, 1.0)),
         transforms.RandomApply(
