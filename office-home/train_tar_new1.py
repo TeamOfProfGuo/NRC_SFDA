@@ -238,7 +238,7 @@ if __name__ == "__main__":
     parser.add_argument('--lr', type=float, default=0.01, help="learning rate")
     parser.add_argument('--seed', type=int, default=2021, help="random seed")
     
-    parser.add_argument('--net', type=str, default='resnet101', help="resnet50, resnet101")
+    parser.add_argument('--net', type=str, default='resnet50', help="resnet50, resnet101")
     parser.add_argument('--class_num', type=int, default=65)
     parser.add_argument('--bottleneck', type=int, default=256)
     parser.add_argument('--layer', type=str, default="wn", choices=["linear", "wn"])
@@ -257,8 +257,9 @@ if __name__ == "__main__":
     parser.add_argument('--nce_wt_decay', type=float, default=0.0, help='0.0:no decay, larger value faster decay')
 
     parser.add_argument('--lp_ma', type=float, default=0.0, help='label used for LP is based on MA or not')
-    parser.add_argument('--lp_type', type=float, default=0.0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
-    parser.add_argument('--T_decay', type=float, default=0.8, help='Temperature decay for creating pseudo-label')
+    parser.add_argument('--lp_type', type=float, default=1.0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
+    parser.add_argument('--T_decay', type=float, default=1.0, help='Temperature decay for creating pseudo-label')
+    parser.add_argument('--w_type', type=str, default='poly', help='how to calculate weight of adjacency matrix', choices=['poly','exp'])
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')

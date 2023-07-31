@@ -84,7 +84,7 @@ if __name__ == "__main__":
     parser.add_argument('--worker', type=int, default=4, help="number of workers")
     parser.add_argument('--dset', type=str, default='c2a')
 
-    parser.add_argument('--net', type=str, default='resnet101', help="resnet50, resnet101")
+    parser.add_argument('--net', type=str, default='resnet50', help="resnet50, resnet101")
     parser.add_argument('--bottleneck', type=int, default=256)
     parser.add_argument('--classifier', type=str, default="bn", choices=["ori", "bn"])
     parser.add_argument('--layer', type=str, default="wn", help='type-classification layer', choices=["linear", "wn"])

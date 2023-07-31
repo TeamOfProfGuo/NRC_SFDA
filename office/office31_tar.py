@@ -10,7 +10,7 @@ from torchvision import transforms
 from model import network, moco
 from model.loss import compute_loss
 from dataset.data_list import ImageList
-from dataset.office_data import office_load, moco_transform, image_target
+from dataset.office_data import office_load, moco_transform, image_target, mn_transform
 from model.model_util import bn_adapt, label_propagation, extract_feature_labels, extract_features
 from torch.utils.data import DataLoader
 import random, pdb, math, copy
@@ -36,6 +36,8 @@ def reset_data_load(dset_loaders, pred_prob, args,):
 
     if args.data_trans == 'moco':
         data_trans = moco_transform(min_scales=args.data_aug)
+    elif args.data_trans == 'mn':
+        data_trans = mn_transform(min_scales=args.data_aug)
     else:
         data_trans = image_target()
 
@@ -77,8 +79,7 @@ def train_target(args):
 
     param_group = [{'params': model.netF.parameters(), 'lr': args.lr * 0.5},
                    {'params': model.netB.parameters(), 'lr': args.lr * 1},
-                   {'params': model.netC.parameters(), 'lr': args.lr * 1},
-                   {'params': model.projection_layer.parameters(), 'lr': args.lr * 1}]
+                   {'params': model.netC.parameters(), 'lr': args.lr * 1},]
 
     optimizer = optim.SGD(param_group, momentum=0.9, weight_decay=1e-3, nesterov=True)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.25)
@@ -214,10 +215,11 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=64, help="batch_size")
     parser.add_argument("--worker", type=int, default=0, help="number of workers")
     parser.add_argument("--dset", type=str, default="a2d")
+    parser.add_argument("--office31", action="store_false", default=True)
     parser.add_argument("--lr", type=float, default=0.005, help="learning rate")
     parser.add_argument("--seed", type=int, default=2021, help="random seed")
 
-    parser.add_argument('--net', type=str, default='resnet101', help="resnet50, resnet101")
+    parser.add_argument('--net', type=str, default='resnet50', help="resnet50, resnet101")
     parser.add_argument("--class_num", type=int, default=31)
     parser.add_argument('--bottleneck', type=int, default=256)
     parser.add_argument('--layer', type=str, default="wn", choices=["linear", "wn"])
@@ -230,10 +232,12 @@ if __name__ == "__main__":
     parser.add_argument("--beta", type=float, default=5.0)
     parser.add_argument("--alpha", type=float, default=1.0)
     parser.add_argument('--data_aug', type=str, default='null', help='delimited list input')  # 0.2,0.5
+    parser.add_argument('--data_trans', type=str, default='moco')
 
     parser.add_argument('--lp_ma', type=float, default=0.0, help='label used for LP is based on MA or not')
     parser.add_argument('--lp_type', type=float, default=1.0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
     parser.add_argument('--T_decay', type=float, default=1.0, help='Temperature decay for creating pseudo-label')
+    parser.add_argument('--w_type', type=str, default='poly', help='how to calculate weight of adjacency matrix', choices=['poly','exp'])
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')

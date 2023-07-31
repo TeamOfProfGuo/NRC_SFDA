@@ -95,33 +95,67 @@ def l_loader(path):
             return img.convert("L")
 
 
-moco_base_augmentation0 = [
-    transforms.RandomResizedCrop(224, scale=(0.2, 1.0)),
-    transforms.RandomApply(
-        [transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8  # not strengthened
-    ),
-    transforms.RandomGrayscale(p=0.2),
-    transforms.RandomApply([GaussianBlur(radius_min=0.1, radius_max=2.0)], p=0.5),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-]
+def get_moco_base_augmentation0(min_scale=None, max_scale=None):
+    if min_scale is None:
+        min_scale = 0.2
+    if max_scale is None: 
+        max_scale = 1.0
+    return [
+        transforms.RandomResizedCrop(224, scale=(min_scale, 1.0)),
+        transforms.RandomApply(
+            [transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8  # not strengthened
+        ),
+        transforms.RandomGrayscale(p=0.2),
+        transforms.RandomApply([GaussianBlur(radius_min=0.1, radius_max=2.0)], p=0.5),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ]
 
-moco_base_augmentation1 = [
-    transforms.RandomResizedCrop(224, scale=(0.5, 1.0)),
-    transforms.RandomApply(
-        [transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8  # not strengthened
-    ),
-    transforms.RandomGrayscale(p=0.2),
-    transforms.RandomApply([GaussianBlur(radius_min=0.1, radius_max=2.0)], p=0.5),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-]
+def get_moco_base_augmentation1(min_scale=None):
+    if min_scale is None:
+        min_scale = 0.5
+    return [
+        transforms.RandomResizedCrop(224, scale=(min_scale, 1.0)),
+        transforms.RandomApply(
+            [transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8  # not strengthened
+        ),
+        transforms.RandomGrayscale(p=0.2),
+        transforms.RandomApply([GaussianBlur(radius_min=0.1, radius_max=2.0)], p=0.5),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ]
 
-moco_transform = TwoCropsTransform(transforms.Compose(moco_base_augmentation0),
-                                   transforms.Compose(moco_base_augmentation1))
+def moco_transform(min_scales=None):
+    if min_scales is None:
+        return TwoCropsTransform(transforms.Compose(get_moco_base_augmentation0()),
+                                 transforms.Compose(get_moco_base_augmentation1()))
+    else:
+        return TwoCropsTransform(transforms.Compose(get_moco_base_augmentation0(min_scales[0])),
+                                 transforms.Compose(get_moco_base_augmentation1(min_scales[1])))
 
+
+def mn_transform(min_scales=None):
+    if min_scales is None:
+        m_scale = 0.5
+    else:
+        m_scale = min_scales[0]
+
+    return TwoCropsTransform(
+        transforms.Compose(get_moco_base_augmentation0()),
+        transforms.Compose([
+            transforms.Resize((256, 256)),
+            transforms.CenterCrop(224),
+            transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+            transforms.RandomGrayscale(p=0.2),
+            transforms.RandomApply([GaussianBlur(radius_min=0.1, radius_max=2.0)], p=0.5),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+    )
+    
 
 def office_load(args, ret_idx=False):
     train_bs = args.batch_size

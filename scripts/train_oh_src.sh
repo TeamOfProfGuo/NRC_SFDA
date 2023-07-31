@@ -10,6 +10,7 @@
 #SBATCH --partition=a100_1,a100_2,v100,rtx8000
 
 # job info
+dset=$1
 
 # Singularity path
 ext3_path=/scratch/$USER/python36/python36.ext3
@@ -20,5 +21,5 @@ singularity exec --nv \
 --overlay ${ext3_path}:ro \
 ${sif_path} /bin/bash -c "
 source /ext3/env.sh
-python -m office-home.train_src
+python -m office-home.train_src --dset ${dset}
 "

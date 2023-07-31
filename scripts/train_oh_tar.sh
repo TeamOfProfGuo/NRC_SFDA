@@ -22,21 +22,21 @@ singularity exec --nv \
 --overlay ${ext3_path}:ro \
 ${sif_path} /bin/bash -c "
 source /ext3/env.sh
-python -m office-home.train_tar_new1 --dset a2c --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_dot
-python -m office-home.train_tar_new1 --dset a2p --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_dot
-python -m office-home.train_tar_new1 --dset a2r --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_dot
+python -m office-home.train_tar_new1 --dset a2c --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_lp1
+python -m office-home.train_tar_new1 --dset a2p --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_lp1
+python -m office-home.train_tar_new1 --dset a2r --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_lp1
 
-python -m office-home.train_tar_new1 --dset c2a --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_dot
-python -m office-home.train_tar_new1 --dset c2p --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_dot
-python -m office-home.train_tar_new1 --dset c2r --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_dot
+python -m office-home.train_tar_new1 --dset c2a --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_lp1
+python -m office-home.train_tar_new1 --dset c2p --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_lp1
+python -m office-home.train_tar_new1 --dset c2r --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_lp1
 
-python -m office-home.train_tar_new1 --dset p2a --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_dot
-python -m office-home.train_tar_new1 --dset p2c --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_dot
-python -m office-home.train_tar_new1 --dset p2r --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_dot
+python -m office-home.train_tar_new1 --dset p2a --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_lp1
+python -m office-home.train_tar_new1 --dset p2c --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_lp1
+python -m office-home.train_tar_new1 --dset p2r --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_lp1
 
-python -m office-home.train_tar_new1 --dset r2a --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_dot
-python -m office-home.train_tar_new1 --dset r2c --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_dot
-python -m office-home.train_tar_new1 --dset r2p --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_dot
+python -m office-home.train_tar_new1 --dset r2a --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_lp1
+python -m office-home.train_tar_new1 --dset r2c --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_lp1
+python -m office-home.train_tar_new1 --dset r2p --loss_type dot --loss_wt en5 --nce_wt 0.0 --exp_name moco_wt00_en5_lp1
 
 "
 
