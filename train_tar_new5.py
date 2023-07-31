@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 
 from model import network, moco
 from dataset.data_list import ImageList
-from dataset.visda_data import data_load, image_train, moco_transform, mm_transform
+from dataset.visda_data import data_load, image_train, moco_transform, mm_transform, mn_transform
 from model.model_util import bn_adapt, bn_adapt1, label_propagation, extract_feature_labels, extract_features
 from model.loss import compute_loss
 from dataset.data_transform import TransformSW
@@ -30,6 +30,8 @@ def reset_data_load(dset_loaders, pred_prob, args, moco_load=False):
         data_trans = TransformSW(mean, std)
     elif args.data_trans == 'mm':
         data_trans = mm_transform(min_scales=args.data_aug)
+    elif args.data_trans == 'mn':
+        data_trans = mn_transform(min_scales=args.data_aug)
     else:
         data_trans = image_train()
     dsets = ImageList(txt_tar, transform=data_trans, root=os.path.dirname(args.t_dset_path), ret_idx=True, pprob=pred_prob, ret_plabel=True, args=args)
@@ -233,7 +235,7 @@ if __name__ == "__main__":
     
 
     parser.add_argument('--lp_type', type=float, default=0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
-    parser.add_argument('--T_decay', type=float, default=0.8, help='Temperature decay of creating pseudo-label in feature extraction')
+    parser.add_argument('--T_decay', type=float, default=1.0, help='Temperature decay of creating pseudo-label in feature extraction')
     parser.add_argument('--feat_type', type=str, default='cls', choices=['cls', 'teacher', 'student'])
     parser.add_argument('--nce_wt', type=float, default=1.0, help='weight for nce loss')
     parser.add_argument('--nce_wt_decay', type=float, default=0.0, help='0.0:no decay, larger value faster decay')

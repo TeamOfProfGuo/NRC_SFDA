@@ -114,7 +114,7 @@ def office_load(args, ret_idx=False):
         s_tr = txt_src
         s_ts = txt_src
 
-        t_tr, t_ts = "./data/office/{}_list.txt".format(t), "./data/office/{}_list.txt".format(t)
+        t_tr, t_ts = "./dataset/data_list/office/{}_list.txt".format(t), "./dataset/data_list/office/{}_list.txt".format(t)
         prep_dict = {}
         prep_dict["source"] = image_train()
         prep_dict["target"] = image_target()

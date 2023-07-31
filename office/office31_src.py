@@ -1,5 +1,5 @@
 import argparse
-import os, sys
+import os, sys, copy
 import os.path as osp
 import torchvision
 import numpy as np
@@ -74,9 +74,9 @@ def train_source(args, log):
 
         if acc_t >= acc_init:
             acc_init = acc_t
-            best_netF = netF.state_dict()
-            best_netB = netB.state_dict()
-            best_netC = netC.state_dict()
+            best_netF = copy.deepcopy(netF.state_dict())
+            best_netB = copy.deepcopy(netB.state_dict())
+            best_netC = copy.deepcopy(netC.state_dict())
     torch.save(best_netF, osp.join(args.output_dir, "source_F.pt"))
     torch.save(best_netB, osp.join(args.output_dir, "source_B.pt"))
     torch.save(best_netC, osp.join(args.output_dir, "source_C.pt"))
@@ -117,6 +117,7 @@ if __name__ == "__main__":
     parser.add_argument("--class_num", type=int, default=31)
     parser.add_argument("--par", type=float, default=0.1)
 
+    parser.add_argument('--net', type=str, default='resnet50', help="resnet50, resnet101")
     parser.add_argument("--bottleneck", type=int, default=256)
     parser.add_argument("--layer", type=str, default="wn", choices=["linear", "wn"])
     parser.add_argument("--classifier", type=str, default="bn", choices=["ori", "bn"])
