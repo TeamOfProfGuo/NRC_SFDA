@@ -1,3 +1,4 @@
+import copy
 import random
 import argparse
 import os.path as osp
@@ -41,14 +42,15 @@ def train_source(args, log):
 
         netF.eval()
         netC.eval()
-        acc_s_tr, _ = cal_acc(dset_loaders['source_te'], netF, netB, netC)
-        log('Source: {}, Iter:{}/{}; Accuracy = {:.2f}%'.format(args.dset, epoch + 1, args.max_epoch, acc_s_tr * 100))
+        acc_s, _ = cal_acc(dset_loaders['source_te'], netF, netB, netC)
+        acc_t, _ = cal_acc(dset_loaders['test'], netF, netB, netC)
+        log('Source: {}, Iter:{}/{}; Src Acc = {:.2f}%, Tar Acc = {:.2f}%'.format(args.dset, epoch + 1, args.max_epoch, acc_s * 100, acc_t*100))
 
-        if acc_s_tr >= acc_init:
-            acc_init = acc_s_tr
-            best_netF = netF.state_dict()
-            best_netB = netB.state_dict()
-            best_netC = netC.state_dict()
+        if acc_t >= acc_init:
+            acc_init = acc_t
+            best_netF = copy.deepcopy(netF.state_dict())
+            best_netB = copy.deepcopy(netB.state_dict())
+            best_netC = copy.deepcopy(netC.state_dict())
     torch.save(best_netF, osp.join(args.output_dir, "source_F.pt"))
     torch.save(best_netB, osp.join(args.output_dir, "source_B.pt"))
     torch.save(best_netC, osp.join(args.output_dir, "source_C.pt"))
