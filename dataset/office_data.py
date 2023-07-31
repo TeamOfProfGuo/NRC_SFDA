@@ -6,6 +6,7 @@ import torchvision
 from PIL import Image
 from torch.utils.data import Dataset
 from dataset.data_list import ImageList
+from dataset.data_transform import GaussianBlur, TwoCropsTransform
 
 
 def image_train(resize_size=256, crop_size=224):
@@ -92,6 +93,34 @@ def l_loader(path):
     with open(path, "rb") as f:
         with Image.open(f) as img:
             return img.convert("L")
+
+
+moco_base_augmentation0 = [
+    transforms.RandomResizedCrop(224, scale=(0.2, 1.0)),
+    transforms.RandomApply(
+        [transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8  # not strengthened
+    ),
+    transforms.RandomGrayscale(p=0.2),
+    transforms.RandomApply([GaussianBlur(radius_min=0.1, radius_max=2.0)], p=0.5),
+    transforms.RandomHorizontalFlip(),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+]
+
+moco_base_augmentation1 = [
+    transforms.RandomResizedCrop(224, scale=(0.5, 1.0)),
+    transforms.RandomApply(
+        [transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8  # not strengthened
+    ),
+    transforms.RandomGrayscale(p=0.2),
+    transforms.RandomApply([GaussianBlur(radius_min=0.1, radius_max=2.0)], p=0.5),
+    transforms.RandomHorizontalFlip(),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+]
+
+moco_transform = TwoCropsTransform(transforms.Compose(moco_base_augmentation0),
+                                   transforms.Compose(moco_base_augmentation1))
 
 
 def office_load(args, ret_idx=False):

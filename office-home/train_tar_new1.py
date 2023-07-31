@@ -186,8 +186,8 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
         
         
 
-        ce_loss0 = compute_loss(plabel, prob_tar0, type=args.loss_type, weight=weight, cls_weight=cls_weight)
-        ce_loss1 = compute_loss(plabel, prob_tar1, type=args.loss_type, weight=weight, cls_weight=cls_weight)
+        ce_loss0 = compute_loss(plabel, prob_tar0, type=args.loss_type, weight=weight, cls_weight=cls_weight, soft_flag=args.plabel_soft)
+        ce_loss1 = compute_loss(plabel, prob_tar1, type=args.loss_type, weight=weight, cls_weight=cls_weight, soft_flag=args.plabel_soft)
         ce_loss = 2.0 * ce0_wt * ce_loss0 + 2.0 * ce1_wt * ce_loss1
 
         # model._momentum_update_teacher()
@@ -282,10 +282,6 @@ if __name__ == "__main__":
     np.random.seed(SEED)
     random.seed(SEED)
     torch.backends.cudnn.deterministic = True
-    
-    current_folder = "./"
-    args.output_dir = osp.join(current_folder, args.output,
-                               'seed' + str(args.seed), args.dset)
 
     args.output_dir_src = osp.join('result/home/source/seed2021/', args.dset[0])
     args.output_dir = osp.join(args.output, 'home', args.exp_name, args.dset)

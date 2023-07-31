@@ -4,13 +4,14 @@ import os, sys
 sys.path.append("./")
 
 import os.path as osp
-import torchvision
-import numpy as np
-import torch
-import torch.nn as nn
+from datetime import date
 import torch.optim as optim
 from torchvision import transforms
-import network
+from model import network, moco
+from model.loss import compute_loss
+from dataset.data_list import ImageList
+from dataset.office_data import office_load, moco_transform, image_target
+from model.model_util import bn_adapt, label_propagation, extract_feature_labels, extract_features
 from torch.utils.data import DataLoader
 import random, pdb, math, copy
 from tqdm import tqdm
@@ -19,405 +20,235 @@ from utils import *
 from torch import autograd
 
 
-def print_args(args):
-    s = "==========================================\n"
-    for arg, content in args.__dict__.items():
-        s += "{}:{}\n".format(arg, content)
-    return s
+def map_name(shot_name):
+    map_dict = {'a': "amazon", "d": "dslr", "w": "webcam"}
+    return map_dict[shot_name]
 
 
-def op_copy(optimizer):
-    for param_group in optimizer.param_groups:
-        param_group["lr0"] = param_group["lr"]
-    return optimizer
+def reset_data_load(dset_loaders, pred_prob, args,):
+    """
+        modify the target data loader to return both image and pseudo label
+        """
+    tt = args.dset.split("2")[1]
+    t = map_name(tt)
+    tar_list = "./dataset/data_list/office/{}_list.txt".format(t)
+    tar_list = open(tar_list).readlines()
+
+    if args.data_trans == 'moco':
+        data_trans = moco_transform(min_scales=args.data_aug)
+    else:
+        data_trans = image_target()
+
+    data_target = ImageList(tar_list, transform=data_trans, root='../dataset/', ret_idx=True, pprob=pred_prob, ret_plabel=True, args=args)
+    dloader = DataLoader(data_target, batch_size=args.batch_size, shuffle=True, num_workers=args.worker, drop_last=False)
+    dset_loaders['target'] = dloader
 
 
-def lr_scheduler(optimizer, iter_num, max_iter, gamma=10, power=0.75):
-    decay = (1 + gamma * iter_num / max_iter) ** (-power)
-    for param_group in optimizer.param_groups:
-        param_group["lr"] = param_group["lr0"] * decay
-        param_group["weight_decay"] = 1e-3
-        param_group["momentum"] = 0.9
-        param_group["nesterov"] = True
-    return optimizer
+def train_target(args):
+    dset_loaders = office_load(args, ret_idx=True)
 
+    # ==== set base network
+    netF = network.ResBase(res_name=args.net).cuda()
+    netB = network.feat_bootleneck(type='bn', feature_dim=netF.in_features, bottleneck_dim=args.bottleneck).cuda()
+    netC = network.feat_classifier(type=args.layer, class_num=args.class_num, bottleneck_dim=args.bottleneck).cuda()
 
-class ImageList_idx(Dataset):
-    def __init__(
-        self, image_list, labels=None, transform=None, target_transform=None, mode="RGB"
-    ):
-        imgs = make_dataset(image_list, labels)
-
-        self.imgs = imgs
-        self.transform = transform
-        self.target_transform = target_transform
-        if mode == "RGB":
-            self.loader = rgb_loader
-        elif mode == "L":
-            self.loader = l_loader
-
-    def __getitem__(self, index):
-        path, target = self.imgs[index]
-        # for visda
-        img = self.loader(path)
-        if self.transform is not None:
-            img = self.transform(img)
-        if self.target_transform is not None:
-            target = self.target_transform(target)
-
-        return img, target, index
-
-    def __len__(self):
-        return len(self.imgs)
-
-
-def office_load_idx(args):
-    train_bs = args.batch_size
-    if args.office31 == True:  # and not args.home and not args.visda:
-        ss = args.dset.split("2")[0]
-        tt = args.dset.split("2")[1]
-        if ss == "a":
-            s = "amazon"
-        elif ss == "d":
-            s = "dslr"
-        elif ss == "w":
-            s = "webcam"
-
-        if tt == "a":
-            t = "amazon"
-        elif tt == "d":
-            t = "dslr"
-        elif tt == "w":
-            t = "webcam"
-
-        s_tr, s_ts = "./data/office/{}_list.txt".format(
-            s
-        ), "./data/office/{}_list.txt".format(s)
-
-        txt_src = open(s_tr).readlines()
-        dsize = len(txt_src)
-        # tv_size = int(0.8 * dsize)
-        """print(dsize, tv_size, dsize - tv_size)
-        s_tr, s_ts = torch.utils.data.random_split(txt_src,
-                                                   [tv_size, dsize - tv_size])"""
-        s_tr = txt_src
-        s_ts = txt_src
-
-        t_tr, t_ts = "./data/office/{}_list.txt".format(
-            t
-        ), "./data/office/{}_list.txt".format(t)
-        prep_dict = {}
-        prep_dict["source"] = image_train()
-        prep_dict["target"] = image_target()
-        prep_dict["test"] = image_test()
-        train_source = ImageList_idx(s_tr, transform=prep_dict["source"])
-        test_source = ImageList_idx(s_ts, transform=prep_dict["source"])
-        train_target = ImageList_idx(
-            open(t_tr).readlines(), transform=prep_dict["target"]
-        )
-        test_target = ImageList_idx(open(t_ts).readlines(), transform=prep_dict["test"])
-
-    # office home dataset
-    elif args.visda == True and not args.office31 and not args.home:
-        dataset_path = "/home/shiqiyang/Downloads/visda/"
-        s_tr = s_ts = dataset_path + "train.txt"
-        t_tr = t_ts = dataset_path + "test.txt"
-        prep_dict = {}
-        prep_dict["source"] = image_train()
-        prep_dict["target"] = image_target()
-        prep_dict["test"] = image_test()
-        train_source = ImageList_idx(
-            open(s_tr).readlines(), transform=prep_dict["source"]
-        )
-        """test_source = ImageList_idx(open(s_ts).readlines(),
-                                transform=prep_dict['source'])"""
-        train_target = ImageList_idx(
-            open(t_tr).readlines(), transform=prep_dict["target"]
-        )
-        test_target = ImageList_idx(open(t_ts).readlines(), transform=prep_dict["test"])
-    elif args.home == True and not args.office31 and not args.visda:
-        ss = args.dset.split("2")[0]
-        tt = args.dset.split("2")[1]
-        if ss == "a":
-            s = "Art"
-        elif ss == "c":
-            s = "Clipart"
-        elif ss == "p":
-            s = "Product"
-        elif ss == "r":
-            s = "Real_World"
-
-        if tt == "a":
-            t = "Art"
-        elif tt == "c":
-            t = "Clipart"
-        elif tt == "p":
-            t = "Product"
-        elif tt == "r":
-            t = "Real_World"
-
-        s_tr, s_ts = "./data/office-home/{}.txt".format(
-            s
-        ), "./data/office-home/{}.txt".format(s)
-
-        txt_src = open(s_tr).readlines()
-        dsize = len(txt_src)
-        """tv_size = int(0.8 * dsize)
-        print(dsize, tv_size, dsize - tv_size)
-        s_tr, s_ts = torch.utils.data.random_split(txt_src,
-                                                   [tv_size, dsize - tv_size])"""
-        s_tr = txt_src
-        s_ts = txt_src
-
-        t_tr, t_ts = "./data/office-home/{}.txt".format(
-            t
-        ), "./data/office-home/{}.txt".format(t)
-        prep_dict = {}
-        prep_dict["source"] = image_train()
-        prep_dict["target"] = image_target()
-        prep_dict["test"] = image_test()
-        train_source = ImageList_idx(s_tr, transform=prep_dict["source"])
-        test_source = ImageList_idx(s_ts, transform=prep_dict["source"])
-        train_target = ImageList_idx(
-            open(t_tr).readlines(), transform=prep_dict["target"]
-        )
-        test_target = ImageList_idx(open(t_ts).readlines(), transform=prep_dict["test"])
-
-    dset_loaders = {}
-    dset_loaders["source_tr"] = DataLoader(
-        train_source,
-        batch_size=train_bs,
-        shuffle=True,
-        num_workers=args.worker,
-        drop_last=False,
-    )
-    dset_loaders["source_te"] = DataLoader(
-        test_source,
-        batch_size=train_bs * 2,  # 2
-        shuffle=True,
-        num_workers=args.worker,
-        drop_last=False,
-    )
-    """dset_loaders["source_f"] = DataLoader(fish_source,
-                                           batch_size=train_bs ,
-                                           shuffle=True,
-                                           num_workers=args.worker,
-                                           drop_last=False)"""
-    dset_loaders["target"] = DataLoader(
-        train_target,
-        batch_size=train_bs,
-        shuffle=True,
-        num_workers=args.worker,
-        drop_last=False,
-    )
-    dset_loaders["test"] = DataLoader(
-        test_target,
-        batch_size=train_bs * 3,  # 3
-        shuffle=True,
-        num_workers=args.worker,
-        drop_last=False,
-    )
-    return dset_loaders
-
-
-def train_target_near1(args):
-    dset_loaders = office_load_idx(args)
-    ## set base network
-
-    netF = network.ResNet_FE().cuda()
-    oldC = network.feat_classifier(
-        type=args.layer, class_num=args.class_num, bottleneck_dim=args.bottleneck
-    ).cuda()
-
-    modelpath = args.output_dir + "/source_F.pt"
+    modelpath = args.output_dir_src + '/source_F.pt'
     netF.load_state_dict(torch.load(modelpath))
-    modelpath = args.output_dir + "/source_C.pt"
-    oldC.load_state_dict(torch.load(modelpath))
+    modelpath = args.output_dir_src + '/source_B.pt'
+    netB.load_state_dict(torch.load(modelpath))
+    modelpath = args.output_dir_src + '/source_C.pt'
+    netC.load_state_dict(torch.load(modelpath))
 
-    optimizer = optim.SGD(
-        [
-            {"params": netF.feature_layers.parameters(), "lr": args.lr * 0.1},  # 1
-            {"params": netF.bottle.parameters(), "lr": args.lr * 1},  # 10
-            {"params": netF.bn.parameters(), "lr": args.lr * 1},  # 10
-            {"params": oldC.parameters(), "lr": args.lr * 1},  # 10
-        ],
-        momentum=0.9,
-        weight_decay=5e-4,
-        nesterov=True,
-    )
-    optimizer = op_copy(optimizer)
+    # ========== performance of original model ==========
+    mean_acc, classwise_acc, acc = cal_acc(dset_loaders["test"], netF, netB, netC, flag=True)
+    log("Source model accuracy on target domain: {:.2f}%".format(mean_acc * 100) +
+        '\nClasswise accuracy: {}'.format(classwise_acc))
 
-    acc_init = 0
-    start = True
-    loader = dset_loaders["target"]
-    num_sample = len(loader.dataset)
-    fea_bank = torch.randn(num_sample, 256)
-    score_bank = torch.randn(num_sample, args.class_num).cuda()
+    FT_MAX_ACC, FT_MAX_MEAN_ACC = acc, mean_acc
+    LP_MAX_ACC, LP_MAX_MEAN_ACC = acc, mean_acc
 
-    netF.eval()
-    oldC.eval()
-    with torch.no_grad():
-        iter_test = iter(loader)
-        for i in range(len(loader)):
-            data = iter_test.next()
-            inputs = data[0]
-            indx = data[-1]
-            # labels = data[1]
-            inputs = inputs.cuda()
-            output = netF.forward(inputs)  # a^t
-            output_norm = F.normalize(output)
-            outputs = oldC(output)
-            outputs = nn.Softmax(-1)(outputs)
-            fea_bank[indx] = output_norm.detach().clone().cpu()
-            score_bank[indx] = outputs.detach().clone()  # .cpu()
-            # all_label = torch.cat((all_label, labels.float()), 0)
-        # fea_bank = fea_bank.detach().cpu().numpy()
-        # score_bank = score_bank.detach()
+    if args.bn_adapt:
+        log("Adapt Batch Norm parameters")
+        netF, netB = bn_adapt(netF, netB, dset_loaders["target"], runs=1000)
 
-    max_iter = args.max_epoch * len(dset_loaders["target"])
-    interval_iter = max_iter // args.interval
-    iter_num = 0
+    # ========== Define Model with Contrastive Branch ============
+    model = moco.UniModel(netF, netB, netC)
+    model = model.cuda()
 
-    netF.train()
-    oldC.train()
+    param_group = [{'params': model.netF.parameters(), 'lr': args.lr * 0.5},
+                   {'params': model.netB.parameters(), 'lr': args.lr * 1},
+                   {'params': model.netC.parameters(), 'lr': args.lr * 1},
+                   {'params': model.projection_layer.parameters(), 'lr': args.lr * 1}]
 
-    while iter_num < max_iter:
-        """if iter_num>0.5*max_iter:
-        args.K = 4
-        args.KK = 6"""
-        # for epoch in range(args.max_epoch):
-        netF.train()
-        oldC.train()
-        # iter_target = iter(dset_loaders["target"])
+    optimizer = optim.SGD(param_group, momentum=0.9, weight_decay=1e-3, nesterov=True)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.25)
 
-        try:
-            inputs_test, _, tar_idx = iter_target.next()
-        except:
-            iter_target = iter(dset_loaders["target"])
-            inputs_test, _, tar_idx = iter_target.next()
+    # ======================= start training =======================
+    for epoch in range(1, args.max_epoch + 1):
+        log('==> Start epoch {}'.format(epoch))
 
-        if inputs_test.size(0) == 1:
+        # ====== extract features ======
+        pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"],
+                                                                        model.netF, model.netB, model.netC,
+                                                                        args, log, epoch)
+
+        Z = torch.zeros(len(dset_loaders['target'].dataset), args.class_num).float().numpy()  # intermediate values
+        z = torch.zeros(len(dset_loaders['target'].dataset), args.class_num).float().numpy()  # temporal outputs
+        if (args.lp_ma > 0.0) and (args.lp_ma < 1.0):  # if lp_ma=0 or lp_ma=1, then no moving avg
+            Z = args.lp_ma * Z + (1. - args.lp_ma) * pred_probs
+            z = Z * (1. / (1. - args.lp_ma ** epoch))
+            pred_probs = z
+
+        # ====== label propagation ======
+        pred_labels, pred_probs, mean_acc, acc = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99,
+                                                                   max_iter=20, ret_acc=True)
+        if acc > LP_MAX_ACC:
+            LP_MAX_ACC = acc
+            LP_MAX_MEAN_ACC = mean_acc
+
+        # modify data loader: (1) add pseudo label to moco data loader
+        reset_data_load(dset_loaders, pred_probs, args,)
+
+        mean_acc, acc = finetune_one_epoch(model, dset_loaders, optimizer, epoch)
+
+        # how about LR
+        scheduler.step()
+        log('Current lr is netF: {:.6f}, netB: {:.6f}, netC: {:.6f}'.format(
+            optimizer.param_groups[0]['lr'], optimizer.param_groups[1]['lr'], optimizer.param_groups[2]['lr']))
+
+        if acc > FT_MAX_ACC:
+            FT_MAX_ACC = acc
+            FT_MAX_MEAN_ACC = mean_acc
+
+            # today = date.today()
+            # torch.save(netF.state_dict(),
+            #            osp.join(args.output_dir, "target_F_" + today.strftime("%Y%m%d") + ".pt"))
+            # torch.save(netB.state_dict(),
+            #            osp.join(args.output_dir, "target_B_" + today.strftime("%Y%m%d") + ".pt"))
+            # torch.save(netC.state_dict(),
+            #            osp.join(args.output_dir, "target_C_" + today.strftime("%Y%m%d") + ".pt"))
+        log('------LP_MAX_ACC={:.2f}%, LP_MAX_MEAN_ACC={:.2f}%, FT_MAX_ACC={:.2f}%, FT_MAX_MEAN_ACC={:.2f}% '.format(
+            LP_MAX_ACC * 100, LP_MAX_MEAN_ACC * 100, FT_MAX_ACC * 100, FT_MAX_MEAN_ACC * 100))
+
+
+def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
+    # ======================== start training / adaptation
+    model.train()
+
+    if args.loss_wt[1] == 'c':  # classwise weight
+        plabel_inique, plabel_cnt = np.unique(dset_loaders["target"].dataset.plabel, return_counts=True)
+        sorted_idx = np.argsort(plabel_inique)
+        plabel_cnt = plabel_cnt.astype(np.float)
+        cls_weight = 1 / plabel_cnt[sorted_idx]
+        cls_weight *= np.mean(plabel_cnt)
+        log('cls_weight: ' + ','.join(['{:.2f}'.format(wt) for wt in cls_weight]))
+        cls_weight = torch.tensor(cls_weight).cuda()
+
+    for iter_num, batch_data in enumerate(dset_loaders["target"]):
+        img_tar, _, tar_idx, plabel, weight = batch_data
+
+        if img_tar[0].size(0) == 1:
             continue
 
-        alpha = (1 + 10 * iter_num / max_iter) ** (-args.beta) * 1
+        img_tar[0] = img_tar[0].cuda()
+        img_tar[1] = img_tar[1].cuda()
+        plabel = plabel.cuda()
+        weight = weight.cuda()
 
-        inputs_test = inputs_test.cuda()
+        logit_tar0 = model(img_tar[0])
+        prob_tar0 = nn.Softmax(dim=1)(logit_tar0)
+        logit_tar1 = model(img_tar[1])
+        prob_tar1 = nn.Softmax(dim=1)(logit_tar1)  # [B, K]
 
-        iter_num += 1
-        # lr_scheduler(optimizer, iter_num=iter_num, max_iter=max_iter)
-        """for _, (inputs_target, _,indx) in enumerate(iter_target):
-            if inputs_target.size(0) == 1:
-                continue"""
-        inputs_target = inputs_test.cuda()
+        if args.loss_wt[0] == 'e':  # entropy weight
+            pass
+        elif args.loss_wt[0] == 'p':  # confidence weight
+            prob_dist = torch.abs(prob_tar1.detach() - prob_tar0.detach()).sum(dim=1)  # [B]
+            confidence_weight = 1 - torch.nn.functional.sigmoid(prob_dist)
+            weight = confidence_weight
+        elif args.loss_wt[1] == 'n':
+            weight = None
 
-        features_test = netF(inputs_target)
-        # print(netF.mask.max())
+        if args.loss_wt[1] == 'c':
+            pass
+        else:
+            cls_weight = None
 
-        output = oldC(features_test)
-        softmax_out = nn.Softmax(dim=1)(output)
-        output_re = softmax_out.unsqueeze(1)  # batch x 1 x num_class
+        ce0_wt, ce1_wt = float(args.loss_wt[2]) / 10, 1 - float(args.loss_wt[2]) / 10
 
-        with torch.no_grad():
-            output_f_norm = F.normalize(features_test)
-            output_f_ = output_f_norm.cpu().detach().clone()
+        ce_loss0 = compute_loss(plabel, prob_tar0, type=args.loss_type, weight=weight, cls_weight=cls_weight, soft_flag=args.plabel_soft)
+        ce_loss1 = compute_loss(plabel, prob_tar1, type=args.loss_type, weight=weight, cls_weight=cls_weight, soft_flag=args.plabel_soft)
+        ce_loss = 2.0 * ce0_wt * ce_loss0 + 2.0 * ce1_wt * ce_loss1
 
-            pred_bs = softmax_out
+        # model._momentum_update_teacher()
 
-            fea_bank[tar_idx] = output_f_.detach().clone().cpu()
-            score_bank[tar_idx] = pred_bs.detach().clone()
-
-            distance = output_f_ @ fea_bank.T
-            _, idx_near = torch.topk(distance, dim=-1, largest=True, k=args.K + 1)
-            idx_near = idx_near[:, 1:]  # batch x K
-            score_near = score_bank[idx_near]  # batch x K x C
-            # score_near=score_near.permute(0,2,1)
-
-            fea_near = fea_bank[idx_near]  # batch x K x num_dim
-
-        # nn
-        softmax_out_un = softmax_out.unsqueeze(1).expand(
-            -1, args.K, -1
-        )  # batch x K x C
-
-        loss = torch.mean(
-            (F.kl_div(softmax_out_un, score_near, reduction="none").sum(-1)).sum(1)
-        )  #
-
-        if True:
-            # other prediction scores as negative pairs
-            mask = torch.ones((inputs_target.shape[0], inputs_target.shape[0]))
-            diag_num = torch.diag(mask)
-            mask_diag = torch.diag_embed(diag_num)
-            mask = mask - mask_diag
-            copy = softmax_out.T  # .detach().clone()  #
-
-            dot_neg = softmax_out @ copy  # batch x batch
-            dot_neg = (dot_neg * mask.cuda()).sum(-1)  # batch
-            neg_pred = torch.mean(dot_neg)
-            loss += neg_pred * alpha
+        # if iter_num == 0 and epoch == 1:
+        #     log('pred0 {}, pred1 {}'.format(prob_tar0[0].cpu().detach().numpy(), prob_tar1[0].cpu().detach().numpy()))
+        #     log('{} weight {}'.format('entropy' if args.loss_wt[0]=='e' else 'confidence',
+        #                               weight[0:5].cpu().numpy()))
 
         optimizer.zero_grad()
-        loss.backward()
+        ce_loss.backward()
         optimizer.step()
 
-        if iter_num % interval_iter == 0 or iter_num == max_iter:
-            netF.eval()
-            oldC.eval()
+    model.eval()
+    mean_acc, classwise_acc, acc, cm = cal_acc(dset_loaders['test'], model.netF, model.netB, model.netC,
+                                               flag=True, ret_cm=True)
+    log('After fine-tuning, Acc: {:.2f}%, Mean Acc: {:.2f}%,'.format(acc * 100, mean_acc * 100) +
+        '\n' + 'Classwise accuracy: ' + classwise_acc)
 
-            # print("target")
-            acc1, _ = cal_acc_(dset_loaders["test"], netF, oldC)  # 1
-            # print("source")
-            log_str = "Task: {}, Iter:{}/{}; Accuracy on target = {:.2f}%".format(
-                args.dset, iter_num, max_iter, acc1 * 100
-            )
-            args.out_file.write(log_str + "\n")
-            args.out_file.flush()
-            print(log_str)
-    if acc1 >= acc_init:
-        acc_init = acc1
-        best_netF = netF.state_dict()
-        best_netC = oldC.state_dict()
+    # if epoch == 1 or epoch == 5:
+    #     log('confusion matrix')
+    #     for line in cm:
+    #         log(' '.join(str(e) for e in line))
 
-        torch.save(best_netF, osp.join(args.output_dir, "F_final.pt"))
-        torch.save(best_netC, osp.join(args.output_dir, "C_final.pt"))
-
-    # return mask
+    return mean_acc, acc
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Domain Adaptation on office-home dataset"
-    )
-    parser.add_argument(
-        "--gpu_id", type=str, nargs="?", default="0", help="device id to run"
-    )
+    parser = argparse.ArgumentParser(description="Domain Adaptation on office-31 dataset")
+    parser.add_argument("--gpu_id", type=str, nargs="?", default="0", help="device id to run")
     parser.add_argument("--s", type=int, default=0, help="source")
     parser.add_argument("--t", type=int, default=1, help="target")
     parser.add_argument("--max_epoch", type=int, default=50, help="maximum epoch")
     parser.add_argument("--batch_size", type=int, default=64, help="batch_size")
-    parser.add_argument("--interval", type=int, default=15)
     parser.add_argument("--worker", type=int, default=0, help="number of workers")
     parser.add_argument("--dset", type=str, default="a2d")
-    parser.add_argument("--choice", type=str, default="shot")
-    parser.add_argument("--lr", type=float, default=0.001, help="learning rate")
+    parser.add_argument("--lr", type=float, default=0.005, help="learning rate")
     parser.add_argument("--seed", type=int, default=2021, help="random seed")
+
+    parser.add_argument('--net', type=str, default='resnet101', help="resnet50, resnet101")
     parser.add_argument("--class_num", type=int, default=31)
-    parser.add_argument("--K", type=int, default=3)
-    parser.add_argument("--KK", type=int, default=2)
-    parser.add_argument("--par", type=float, default=0.1)
-    parser.add_argument("--bottleneck", type=int, default=256)
-    parser.add_argument("--layer", type=str, default="wn", choices=["linear", "wn"])
-    parser.add_argument("--classifier", type=str, default="bn", choices=["ori", "bn"])
-    parser.add_argument("--smooth", type=float, default=0.1)
-    parser.add_argument("--beta", type=float, default=0.75)
-    parser.add_argument("--output", type=str, default="hat_1")  # trainingC_2
-    parser.add_argument("--file", type=str, default="k23")
-    parser.add_argument("--idl", action="store_true")
-    parser.add_argument("--home", action="store_true")
-    parser.add_argument("--office31", action="store_true", default=True)
-    parser.add_argument("--visda", action="store_true")
-    parser.add_argument("--use_c", action="store_true", default=True)
+    parser.add_argument('--bottleneck', type=int, default=256)
+    parser.add_argument('--layer', type=str, default="wn", choices=["linear", "wn"])
+    parser.add_argument('--classifier', type=str, default="bn", choices=["ori", "bn"])
+    parser.add_argument('--bn_adapt', action='store_false', help='Whether to first finetune mu and std in BN layers')
+
+    parser.add_argument('--loss_type', type=str, default='dot', help='Loss function for target domain adaptation', choices=['ce', 'sce', 'dot', 'dot_d'])
+    parser.add_argument('--loss_wt', type=str, default='en5', help='CE/SCE loss weight: e|p|n, c|n, 0-9')
+    parser.add_argument('--plabel_soft', action='store_false', help='Whether to use soft/hard pseudo label')  #
+    parser.add_argument("--beta", type=float, default=5.0)
+    parser.add_argument("--alpha", type=float, default=1.0)
+    parser.add_argument('--data_aug', type=str, default='null', help='delimited list input')  # 0.2,0.5
+
+    parser.add_argument('--lp_ma', type=float, default=0.0, help='label used for LP is based on MA or not')
+    parser.add_argument('--lp_type', type=float, default=1.0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
+    parser.add_argument('--T_decay', type=float, default=1.0, help='Temperature decay for creating pseudo-label')
+
+    parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
+    parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')
+    parser.add_argument('--k', type=int, default=3, help='number of neighbors for label propagation')
+
+    parser.add_argument('--output', type=str, default='result/')
+    parser.add_argument('--exp_name', type=str, default='moco_nce5_pn5_k3')
     args = parser.parse_args()
+
+    if args.data_aug != 'null':
+        args.data_aug = [float(v) for v in args.data_aug.split(',')]
+    else:
+        args.data_aug = None
+    if args.loss_type == 'dot' or args.loss_type == 'dot_d':
+        args.plabel_soft = True
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
     SEED = args.seed
@@ -426,34 +257,18 @@ if __name__ == "__main__":
     np.random.seed(SEED)
     random.seed(SEED)
     torch.backends.cudnn.deterministic = True
-    """for dset in [
-            'c2a', 'p2a', 'r2a', 'a2c', 'a2p', 'a2r', 'c2p', 'c2r', 'p2c',
-            'p2r', 'r2c', 'r2p'
-    ]:
 
-        args.dset = dset"""
-    """if args.dset=='a2d' or args.dset=='d2w':
-        args.K=2
-        args.KK=3"""
-    current_folder = "./"
-    args.output_dir = osp.join(
-        current_folder, args.output, "seed" + str(args.seed), args.dset
-    )
+    args.output_dir_src = osp.join('result/office31/source/seed2021/', args.dset[0])
+    args.output_dir = osp.join(args.output, 'office31', args.exp_name, args.dset)
+
+    if os.path.exists(args.output_dir):                             # if output_dir already exists, reset it
+        print('remove the existing folder {}'.format(args.output_dir))
+        shutil.rmtree(args.output_dir)
     if not osp.exists(args.output_dir):
-        os.system("mkdir -p " + args.output_dir)
-    args.out_file = open(osp.join(args.output_dir, args.file + ".txt"), "w")
-    args.out_file.write(print_args(args) + "\n")
-    args.out_file.flush()
-    # train_target(args)
-    # if args.file=='cluster':
-    train_target_near1(args)
-    """if args.file.find('cluster') != -1:
-        print('cluster')
-        train_target_cluster(args)
-    elif args.file == 'SHOT':
-        print('SHOT+HAT')
-        train_target(args)"""
-    """
-    elif args.file=='cluster_idl':
-        print('cluster+idl')
-        train_target_clusterIDL(args)"""
+        os.makedirs(args.output_dir)
+
+    set_log_path(args.output_dir)
+    log('save log to path {}'.format(args.output_dir))
+    log(print_args(args))
+
+    train_target(args)
