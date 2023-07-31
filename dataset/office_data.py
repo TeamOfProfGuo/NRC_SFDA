@@ -104,7 +104,7 @@ def office_load(args, ret_idx=False):
         s = map_dict[ss]
         t = map_dict[tt]
 
-        s_tr, s_ts = "./data/office/{}_list.txt".format(s), "./data/office/{}_list.txt".format(s)
+        s_tr, s_ts = "./dataset/data_list/office/{}_list.txt".format(s), "./dataset/data_list/office/{}_list.txt".format(s)
 
         txt_src = open(s_tr).readlines()
         dsize = len(txt_src)
