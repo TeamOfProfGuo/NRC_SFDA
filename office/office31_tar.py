@@ -10,7 +10,7 @@ from torchvision import transforms
 from model import network, moco
 from model.loss import compute_loss
 from dataset.data_list import ImageList
-from dataset.office_data import office_load, moco_transform, image_target, mn_transform
+from dataset.office_data import office_load, moco_transform, image_target, mn_transform, get_AutoAug, mw_transform, get_RandAug
 from model.model_util import bn_adapt, label_propagation, extract_feature_labels, extract_features
 from torch.utils.data import DataLoader
 import random, pdb, math, copy
@@ -34,10 +34,16 @@ def reset_data_load(dset_loaders, pred_prob, args,):
     tar_list = "./dataset/data_list/office/{}_list.txt".format(t)
     tar_list = open(tar_list).readlines()
 
-    if args.data_trans == 'moco':
+    if args.data_trans == 'moco':    # moco|mn|mw|ai|ac|ra()
         data_trans = moco_transform(min_scales=args.data_aug)
     elif args.data_trans == 'mn':
         data_trans = mn_transform(min_scales=args.data_aug)
+    elif args.data_trans[0] == 'a':
+        data_trans = get_AutoAug(args)
+    elif args.data_trans == 'ra':
+        data_trans = get_RandAug(args)
+    elif args.data_trans == 'mw':
+        data_trans = mw_transform()
     else:
         data_trans = image_target()
 
@@ -77,7 +83,7 @@ def train_target(args):
     model = moco.UniModel(netF, netB, netC)
     model = model.cuda()
 
-    param_group = [{'params': model.netF.parameters(), 'lr': args.lr * 0.5},
+    param_group = [{'params': model.netF.parameters(), 'lr': args.lr * 0.1},
                    {'params': model.netB.parameters(), 'lr': args.lr * 1},
                    {'params': model.netC.parameters(), 'lr': args.lr * 1},]
 

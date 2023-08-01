@@ -164,6 +164,9 @@ def bn_adapt(netF, netB, data_loader, runs=10):
     for _ in range(len(data_loader)):
         data = next(iter_test)
         inputs, label = data[0], data[1]
+        if inputs.shape[0] < data_loader.batch_size // 2:
+            print('skip last batch')
+            continue
     
         mom_new = (mom_pre * 0.95)
         mom_pre = mom_new

@@ -8,6 +8,9 @@ from torch.utils.data import Dataset
 from dataset.data_list import ImageList
 from dataset.data_transform import GaussianBlur, TwoCropsTransform
 
+normalize = transforms.Normalize(
+        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+    )
 
 def image_train(resize_size=256, crop_size=224):
     return transforms.Compose(
@@ -16,17 +19,12 @@ def image_train(resize_size=256, crop_size=224):
             transforms.RandomCrop(crop_size),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            torchvision.transforms.Normalize(
-                [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
-            ),
+            normalize,
         ]
     )
 
 
 def image_target(resize_size=256, crop_size=224):
-    normalize = transforms.Normalize(
-        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-    )
     return transforms.Compose(
         [
             transforms.Resize((resize_size, resize_size)),
@@ -45,17 +43,12 @@ def image_test(resize_size=256, crop_size=224):
             transforms.CenterCrop(crop_size),
             # transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            torchvision.transforms.Normalize(
-                [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
-            ),
+            normalize,
         ]
     )
 
 
 def image_shift(resize_size=256, crop_size=224):
-    normalize = transforms.Normalize(
-        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-    )
     return transforms.Compose(
         [
             transforms.Resize((resize_size, resize_size)),
@@ -155,7 +148,51 @@ def mn_transform(min_scales=None):
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
     )
-    
+
+
+def mw_transform(min_scales=None):
+    resize_size = 256
+    crop_size = 224
+
+    return TwoCropsTransform(
+        transforms.Compose([
+            transforms.Resize((resize_size, resize_size)),
+            transforms.RandomCrop(crop_size),
+            transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+            transforms.RandomGrayscale(p=0.2),
+            transforms.RandomApply([GaussianBlur(radius_min=0.1, radius_max=2.0)], p=0.5),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            normalize]),
+        transforms.Compose([
+            transforms.Resize((resize_size, resize_size)),
+            transforms.CenterCrop(crop_size),
+            transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+            transforms.RandomGrayscale(p=0.2),
+            transforms.RandomApply([GaussianBlur(radius_min=0.1, radius_max=2.0)], p=0.5),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            normalize])
+    )
+
+
+def get_AutoAug(args):
+    if args.data_trans == 'ai':
+        return TwoCropsTransform(transforms.AutoAugment(transforms.AutoAugmentPolicy.IMAGENET),
+                                 transforms.AutoAugment(transforms.AutoAugmentPolicy.IMAGENET))
+
+    elif args.data_trans == 'ac':
+        return TwoCropsTransform(transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10),
+                                 transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10))
+
+def get_RandAug(args):
+    if args.data_aug is not None:
+        num_ops, magnitude = args.data_aug  # list
+    else:
+        num_ops, magnitude = 2, 9
+    return TwoCropsTransform(transforms.RandAugment(num_ops, magnitude),
+                             transforms.RandAugment(num_ops, magnitude))
+
 
 def office_load(args, ret_idx=False):
     train_bs = args.batch_size

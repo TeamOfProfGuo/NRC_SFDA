@@ -13,7 +13,7 @@ from model import moco, network
 from model.loss import compute_loss
 from torch.utils.data import DataLoader
 from dataset.data_list import ImageList
-from dataset.oh_data import office_load, moco_transform, image_target
+from dataset.oh_data import office_load, moco_transform, image_target, mn_transform, mw_transform, get_RandAug, get_AutoAug
 from model.model_util import bn_adapt, label_propagation, extract_feature_labels, extract_features
 
 
@@ -31,9 +31,20 @@ def reset_data_load(dset_loaders, pred_prob, args, ss_load=None):
     tar_list = 'dataset/data_list/office-home/{}.txt'.format(t)
     tar_list = open(tar_list).readlines()
 
-    target_transform = moco_transform if ss_load == 'moco' else image_target()
-    data_target = ImageList(tar_list, transform=target_transform, root='../dataset/', ret_idx=True,
-                            pprob=pred_prob, ret_plabel=True, args=args)
+    if args.data_trans == 'moco':  # moco|mn|mw|ai|ac|ra()
+        data_trans = moco_transform(min_scales=args.data_aug)
+    elif args.data_trans == 'mn':
+        data_trans = mn_transform(min_scales=args.data_aug)
+    elif args.data_trans[0] == 'a':
+        data_trans = get_AutoAug(args)
+    elif args.data_trans == 'ra':
+        data_trans = get_RandAug(args)
+    elif args.data_trans == 'mw':
+        data_trans = mw_transform()
+    else:
+        data_trans = image_target()
+
+    data_target = ImageList(tar_list, transform=data_trans, root='../dataset/', ret_idx=True, pprob=pred_prob, ret_plabel=True, args=args)
     dloader = DataLoader(data_target, batch_size=args.batch_size, shuffle=True, num_workers=args.worker, drop_last=False)
 
     if ss_load == 'moco':
@@ -41,7 +52,7 @@ def reset_data_load(dset_loaders, pred_prob, args, ss_load=None):
     else:
         dset_loaders['target'] = dloader
 
-    label_inique, label_cnt = np.unique(data_target.plabel, return_counts=True)
+    # label_inique, label_cnt = np.unique(data_target.plabel, return_counts=True)
     # log('Pseudo label count: ' +
     #     ', '.join(['{} : {}'.format(k, v) for k, v in zip(label_inique, label_cnt)]))
 
@@ -77,7 +88,7 @@ def train_target(args):
     model = moco.MoCo(netF, netB, netC, dim=128, K=4096, m=0.999, T=0.07, mlp=True)
     model = model.cuda()
 
-    param_group = [{'params': model.netF.parameters(), 'lr': args.lr * 0.5},
+    param_group = [{'params': model.netF.parameters(), 'lr': args.lr * 0.1},
                    {'params': model.netB.parameters(), 'lr': args.lr * 1},
                    {'params': model.netC.parameters(), 'lr': args.lr * 1},
                    {'params': model.projection_layer.parameters(), 'lr': args.lr * 1}]
@@ -253,7 +264,9 @@ if __name__ == "__main__":
     parser.add_argument("--beta", type=float, default=5.0)
     parser.add_argument("--alpha", type=float, default=1.0)
     parser.add_argument('--data_aug', type=str, default='null', help='delimited list input')             # 0.2,0.5
-    parser.add_argument('--nce_wt', type=float, default=1.0, help='weight for nce loss')                 # 0.0
+    parser.add_argument('--data_trans', type=str, default='moco')
+
+    parser.add_argument('--nce_wt', type=float, default=0.0, help='weight for nce loss')                 # 0.0
     parser.add_argument('--nce_wt_decay', type=float, default=0.0, help='0.0:no decay, larger value faster decay')
 
     parser.add_argument('--lp_ma', type=float, default=0.0, help='label used for LP is based on MA or not')
