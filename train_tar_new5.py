@@ -1,4 +1,5 @@
 # encoding:utf-8
+import pdb
 import numpy as np
 import os.path as osp
 from datetime import date
@@ -94,6 +95,7 @@ def analysis_target(args):
         model.eval()
         pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"], model.netF, model.netB, model.netC, args, log, epoch)
 
+        
         Z = torch.zeros(len(dset_loaders['target'].dataset), args.class_num).float().numpy()       # intermediate values
         z = torch.zeros(len(dset_loaders['target'].dataset), args.class_num).float().numpy()       # temporal outputs
         if (args.lp_ma > 0.0) and (args.lp_ma<1.0):  # if lp_ma=0 or lp_ma=1, then no moving avg

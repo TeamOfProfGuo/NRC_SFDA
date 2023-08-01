@@ -104,6 +104,7 @@ def train_target(args):
         pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"],
                                                                         model.netF, model.netB, model.netC,
                                                                         args, log, epoch)
+
         if args.feat_type == 'cls':
             pass
         elif args.feat_type == 'student':
@@ -276,7 +277,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')
-    parser.add_argument('--k', type=int, default=3, help='number of neighbors for label propagation')
+    parser.add_argument('--k', type=int, default=4, help='number of neighbors for label propagation')
 
     parser.add_argument('--output', type=str, default='result/')
     parser.add_argument('--exp_name', type=str, default='moco_nce5_pn5_k3')
