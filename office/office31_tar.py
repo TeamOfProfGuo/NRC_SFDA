@@ -187,6 +187,13 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
         ce_loss1 = compute_loss(plabel, prob_tar1, type=args.loss_type, weight=weight, cls_weight=cls_weight, soft_flag=args.plabel_soft)
         ce_loss = 2.0 * ce0_wt * ce_loss0 + 2.0 * ce1_wt * ce_loss1
 
+        if args.div_wt > 0.0:
+            msoftmax0 = prob_tar0.mean(dim=0)
+            msoftmax1 = prob_tar1.mean(dim=0)
+            mentropy_loss = torch.sum(msoftmax0 * torch.log(msoftmax0 + 1e-8)) +\
+                            torch.sum(msoftmax1 * torch.log(msoftmax1 + 1e-8))
+            ce_loss += mentropy_loss * args.div
+
         # model._momentum_update_teacher()
 
         # if iter_num == 0 and epoch == 1:
@@ -239,6 +246,7 @@ if __name__ == "__main__":
     parser.add_argument("--alpha", type=float, default=1.0)
     parser.add_argument('--data_aug', type=str, default='null', help='delimited list input')  # 0.2,0.5
     parser.add_argument('--data_trans', type=str, default='moco')
+    parser.add_argument('--div_wt', type=float, default=0.0, help='weight for divergence')
 
     parser.add_argument('--lp_ma', type=float, default=0.0, help='label used for LP is based on MA or not')
     parser.add_argument('--lp_type', type=float, default=1.0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")

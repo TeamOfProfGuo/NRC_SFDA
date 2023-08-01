@@ -1,7 +1,7 @@
 result
 .idea/**
 *.log
-*.txt
 *.pyc
 *.out
 weight
+*.txt

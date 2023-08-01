@@ -21,14 +21,14 @@ singularity exec --nv \
 --overlay ${ext3_path}:ro \
 ${sif_path} /bin/bash -c "
 source /ext3/env.sh
-python -m office.office31_tar --dset a2d --loss_type sce  --loss_wt en5 --data_trans mw --data_aug 0.5,0.5  --exp_name unim_sces_en5_mw_lr5
-python -m office.office31_tar --dset a2w --loss_type sce  --loss_wt en5 --data_trans mw --data_aug 0.5,0.5  --exp_name unim_sces_en5_mw_lr5
+python -m office.office31_tar --dset a2d --loss_type dot  --loss_wt en5 --data_trans mw --data_aug 0.5,0.5 --lp_type 0.5 --exp_name unim_dot_en5_mw_lp05
+python -m office.office31_tar --dset a2w --loss_type dot  --loss_wt en5 --data_trans mw --data_aug 0.5,0.5 --lp_type 0.5 --exp_name unim_dot_en5_mw_lp05
 
-python -m office.office31_tar --dset d2a --loss_type sce  --loss_wt en5 --data_trans mw --data_aug 0.5,0.5  --exp_name unim_sces_en5_mw_lr5
-python -m office.office31_tar --dset d2w --loss_type sce  --loss_wt en5 --data_trans mw --data_aug 0.5,0.5  --exp_name unim_sces_en5_mw_lr5
+python -m office.office31_tar --dset d2a --loss_type dot  --loss_wt en5 --data_trans mw --data_aug 0.5,0.5 --lp_type 0.5 --exp_name unim_dot_en5_mw_lp05
+python -m office.office31_tar --dset d2w --loss_type dot  --loss_wt en5 --data_trans mw --data_aug 0.5,0.5 --lp_type 0.5 --exp_name unim_dot_en5_mw_lp05
 
-python -m office.office31_tar --dset w2a --loss_type sce  --loss_wt en5 --data_trans mw --data_aug 0.5,0.5  --exp_name unim_sces_en5_mw_lr5
-python -m office.office31_tar --dset w2d --loss_type sce  --loss_wt en5 --data_trans mw --data_aug 0.5,0.5  --exp_name unim_sces_en5_mw_lr5
+python -m office.office31_tar --dset w2a --loss_type dot  --loss_wt en5 --data_trans mw --data_aug 0.5,0.5 --lp_type 0.5 --exp_name unim_dot_en5_mw_lp05
+python -m office.office31_tar --dset w2d --loss_type dot  --loss_wt en5 --data_trans mw --data_aug 0.5,0.5 --lp_type 0.5 --exp_name unim_dot_en5_mw_lp05
 "
 
 

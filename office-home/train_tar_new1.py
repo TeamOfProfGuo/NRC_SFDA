@@ -94,7 +94,7 @@ def train_target(args):
                    {'params': model.projection_layer.parameters(), 'lr': args.lr * 1}]
 
     optimizer = optim.SGD(param_group, momentum=0.9, weight_decay=1e-3, nesterov=True)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.25)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
 
     # ======================= start training =======================
     for epoch in range(1, args.max_epoch + 1):
@@ -195,8 +195,6 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
             cls_weight = None
 
         ce0_wt, ce1_wt = float(args.loss_wt[2]) / 10, 1 - float(args.loss_wt[2]) / 10
-        
-        
 
         ce_loss0 = compute_loss(plabel, prob_tar0, type=args.loss_type, weight=weight, cls_weight=cls_weight, soft_flag=args.plabel_soft)
         ce_loss1 = compute_loss(plabel, prob_tar1, type=args.loss_type, weight=weight, cls_weight=cls_weight, soft_flag=args.plabel_soft)
@@ -216,6 +214,13 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
             loss = ce_loss + nce_wt * nce_loss
         else:
             loss = ce_loss
+
+        if args.div_wt > 0.0:
+            msoftmax0 = prob_tar0.mean(dim=0)
+            msoftmax1 = prob_tar1.mean(dim=0)
+            mentropy_loss = torch.sum(msoftmax0 * torch.log(msoftmax0 + 1e-8)) +\
+                            torch.sum(msoftmax1 * torch.log(msoftmax1 + 1e-8))
+            loss += mentropy_loss * args.div
 
         optimizer.zero_grad()
         loss.backward()
@@ -266,6 +271,8 @@ if __name__ == "__main__":
     parser.add_argument("--alpha", type=float, default=1.0)
     parser.add_argument('--data_aug', type=str, default='null', help='delimited list input')             # 0.2,0.5
     parser.add_argument('--data_trans', type=str, default='moco')
+    parser.add_argument('--div_wt', type=float, default=0.0, help='weight for divergence')
+
 
     parser.add_argument('--nce_wt', type=float, default=0.0, help='weight for nce loss')                 # 0.0
     parser.add_argument('--nce_wt_decay', type=float, default=0.0, help='0.0:no decay, larger value faster decay')
@@ -277,7 +284,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')
-    parser.add_argument('--k', type=int, default=4, help='number of neighbors for label propagation')
+    parser.add_argument('--k', type=int, default=3, help='number of neighbors for label propagation')
 
     parser.add_argument('--output', type=str, default='result/')
     parser.add_argument('--exp_name', type=str, default='moco_nce5_pn5_k3')
