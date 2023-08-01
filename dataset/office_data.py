@@ -138,12 +138,12 @@ def moco_transform(min_scales=None):
 
 def mn_transform(min_scales=None):
     if min_scales is None:
-        m_scale = 0.5
+        m_scale = 0.2
     else:
         m_scale = min_scales[0]
 
     return TwoCropsTransform(
-        transforms.Compose(get_moco_base_augmentation0()),
+        transforms.Compose(get_moco_base_augmentation0(m_scale)),
         transforms.Compose([
             transforms.Resize((256, 256)),
             transforms.CenterCrop(224),

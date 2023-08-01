@@ -11,11 +11,11 @@ import numpy as np
 exp_dict = {} 
 exp_list = []
 
-dir_list = os.listdir(f"./result/home/{sys.argv[1]}")
+dir_list = os.listdir(f"./result/{sys.argv[1]}")
 
 for dir in sorted(dir_list):
     exp_id = f'{sys.argv[1]}_{dir}' 
-    log_path = os.path.join(f'./result/home/{sys.argv[1]}', dir, 'log.txt')
+    log_path = os.path.join(f'./result/{sys.argv[1]}', dir, 'log.txt')
     with open(log_path, 'r') as f:
         lines = f.read().split('\n')
     lines = [line for line in lines if line[:6] == '-'*6]

@@ -109,7 +109,7 @@ if __name__ == "__main__":
     task.remove(task_s)
     task_all = [task_s + '2' + i for i in task]
 
-    args.output_dir = osp.join('result/home/source', 'seed' + str(args.seed), task_s)
+    args.output_dir = osp.join('result/home/source1', 'seed' + str(args.seed), task_s)
     ensure_path(args.output_dir)
     set_log_path(args.output_dir)
     log('save log to path {}'.format(args.output_dir))
