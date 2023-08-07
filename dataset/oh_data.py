@@ -163,13 +163,24 @@ def mw_transform(min_scales=None):
 
 
 def get_AutoAug(args):
+    min_scales = args.data_aug
     if args.data_trans == 'ai':
-        return TwoCropsTransform(transforms.AutoAugment(transforms.AutoAugmentPolicy.IMAGENET),
-                                 transforms.AutoAugment(transforms.AutoAugmentPolicy.IMAGENET))
-
+        policy = transforms.AutoAugmentPolicy.IMAGENET
     elif args.data_trans == 'ac':
-        return TwoCropsTransform(transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10),
-                                 transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10))
+        policy = transforms.AutoAugmentPolicy.CIFAR10
+
+    return TwoCropsTransform(
+        transforms.Compose([
+            transforms.RandomResizedCrop(224, scale=(min_scales[0], 1.0)),
+            transforms.AutoAugment(policy),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(), normalize]),
+        transforms.Compose([
+            transforms.RandomResizedCrop(224, scale=(min_scales[1], 1.0)),
+            transforms.AutoAugment(policy),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(), normalize])
+        )
 
 def get_RandAug(args):
     resize_size, crop_size = 256, 224

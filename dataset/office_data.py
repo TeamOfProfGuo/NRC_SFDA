@@ -176,22 +176,51 @@ def mw_transform(min_scales=None):
     )
 
 
-def get_AutoAug(args):
-    if args.data_trans == 'ai':
-        return TwoCropsTransform(transforms.AutoAugment(transforms.AutoAugmentPolicy.IMAGENET),
-                                 transforms.AutoAugment(transforms.AutoAugmentPolicy.IMAGENET))
 
+def get_AutoAug(args):
+    min_scales = args.data_aug
+    if args.data_trans == 'ai':
+        policy = transforms.AutoAugmentPolicy.IMAGENET
     elif args.data_trans == 'ac':
-        return TwoCropsTransform(transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10),
-                                 transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10))
+        policy = transforms.AutoAugmentPolicy.CIFAR10
+
+    return TwoCropsTransform(
+        transforms.Compose([
+            transforms.RandomResizedCrop(224, scale=(min_scales[0], 1.0)),
+            transforms.AutoAugment(policy),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(), normalize]),
+        transforms.Compose([
+            transforms.RandomResizedCrop(224, scale=(min_scales[1], 1.0)),
+            transforms.AutoAugment(policy),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(), normalize])
+        )
 
 def get_RandAug(args):
+    resize_size, crop_size = 256, 224
     if args.data_aug is not None:
         num_ops, magnitude = args.data_aug  # list
+        num_ops, magnitude = int(num_ops), int(magnitude)
     else:
         num_ops, magnitude = 2, 9
-    return TwoCropsTransform(transforms.RandAugment(num_ops, magnitude),
-                             transforms.RandAugment(num_ops, magnitude))
+    print('num_ops {} magnitude {}'.format(num_ops, magnitude))
+    return TwoCropsTransform(
+        transforms.Compose([
+            transforms.Resize((resize_size, resize_size)),
+            transforms.RandomCrop(crop_size),
+            transforms.RandAugment(num_ops, magnitude),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(), normalize
+        ]),
+        transforms.Compose([
+            transforms.Resize((resize_size, resize_size)),
+            transforms.CenterCrop(crop_size),
+            transforms.RandAugment(num_ops, magnitude),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(), normalize
+        ])
+    )
 
 
 def office_load(args, ret_idx=False):
