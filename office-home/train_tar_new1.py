@@ -99,6 +99,11 @@ def train_target(args):
     # ======================= start training =======================
     for epoch in range(1, args.max_epoch + 1):
         log('==> Start epoch {}'.format(epoch))
+        
+        if args.dk:
+            if epoch >= args.max_epoch//2: 
+                args.K = 2 
+                log('current K {}'.format(args.K))
 
         # ====== extract features ======
         pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"],
@@ -174,6 +179,10 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
         img_tar[1] = img_tar[1].cuda()
         plabel = plabel.cuda()
         weight = weight.cuda()
+        
+        if args.sharp<1 or args.sharp>1: 
+            tempered = torch.pow(plabel, 1 / args.sharp)
+            plabel = tempered / tempered.sum(dim=-1, keepdim=True)
 
         logit_tar0 = model(img_tar[0])
         prob_tar0 = nn.Softmax(dim=1)(logit_tar0)
@@ -207,7 +216,7 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
         #     log('{} weight {}'.format('entropy' if args.loss_wt[0]=='e' else 'confidence',
         #                               weight[0:5].cpu().numpy()))
 
-        if img_tar[0].size(0) == args.batch_size:
+        if img_tar[0].size(0) == args.batch_size and args.nce_wt>0:
             output, target = model.moco_forward(im_q=img_tar[0], im_k=img_tar[1])
             nce_loss = nn.CrossEntropyLoss()(output, target)
             nce_wt = args.nce_wt * (1 + (epoch - 1) / args.max_epoch) ** (-args.nce_wt_decay)
@@ -220,7 +229,7 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
             msoftmax1 = prob_tar1.mean(dim=0)
             mentropy_loss = torch.sum(msoftmax0 * torch.log(msoftmax0 + 1e-8)) +\
                             torch.sum(msoftmax1 * torch.log(msoftmax1 + 1e-8))
-            loss += mentropy_loss * args.div
+            loss += mentropy_loss * args.div_wt
 
         optimizer.zero_grad()
         loss.backward()
@@ -261,7 +270,7 @@ if __name__ == "__main__":
     parser.add_argument('--layer', type=str, default="wn", choices=["linear", "wn"])
     parser.add_argument('--classifier', type=str, default="bn", choices=["ori", "bn"])
 
-    parser.add_argument('--bn_adapt', action='store_false', help='Whether to first finetune mu and std in BN layers')
+    parser.add_argument('--bn_adapt', action='store_true', help='Whether to first finetune mu and std in BN layers')
     parser.add_argument('--feat_type', type=str, default='cls', choices=['cls', 'teacher', 'student'])
 
     parser.add_argument('--loss_type', type=str, default='dot', help='Loss function for target domain adaptation', choices=['ce', 'sce', 'dot', 'dot_d'])
@@ -279,12 +288,14 @@ if __name__ == "__main__":
 
     parser.add_argument('--lp_ma', type=float, default=0.0, help='label used for LP is based on MA or not')
     parser.add_argument('--lp_type', type=float, default=1.0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
+    parser.add_argument('--sharp', type=float, default=1.0, help="sharpen the pseudo-label")
     parser.add_argument('--T_decay', type=float, default=1.0, help='Temperature decay for creating pseudo-label')
     parser.add_argument('--w_type', type=str, default='poly', help='how to calculate weight of adjacency matrix', choices=['poly','exp'])
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')
     parser.add_argument('--k', type=int, default=3, help='number of neighbors for label propagation')
+    parser.add_argument('--dk', action='store_true', default=False, help='decay k')
 
     parser.add_argument('--output', type=str, default='result/')
     parser.add_argument('--exp_name', type=str, default='moco_nce5_pn5_k3')

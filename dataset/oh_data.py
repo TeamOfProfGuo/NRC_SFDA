@@ -172,12 +172,29 @@ def get_AutoAug(args):
                                  transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10))
 
 def get_RandAug(args):
+    resize_size, crop_size = 256, 224
     if args.data_aug is not None:
         num_ops, magnitude = args.data_aug  # list
+        num_ops, magnitude = int(num_ops), int(magnitude)
     else:
         num_ops, magnitude = 2, 9
-    return TwoCropsTransform(transforms.RandAugment(num_ops, magnitude),
-                             transforms.RandAugment(num_ops, magnitude))
+    print('num_ops {} magnitude {}'.format(num_ops, magnitude))
+    return TwoCropsTransform(
+        transforms.Compose([
+            transforms.Resize((resize_size, resize_size)),
+            transforms.RandomCrop(crop_size),
+            transforms.RandAugment(num_ops, magnitude),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(), normalize
+        ]), 
+        transforms.Compose([
+            transforms.Resize((resize_size, resize_size)),
+            transforms.CenterCrop(crop_size),
+            transforms.RandAugment(num_ops, magnitude),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(), normalize
+        ])
+    )
 
 
 def make_dataset(image_list, labels):

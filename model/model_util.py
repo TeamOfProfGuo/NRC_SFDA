@@ -36,7 +36,7 @@ def extract_feature_labels(loader, netF, netB, netC, args, log, epoch=0, isMT = 
 
     temperature = args.lp_type if args.lp_type>0 else 1
     if args.lp_type > 0:
-        temperature *= args.T_decay ** (epoch-0)
+        temperature *= (1 + 10 * (epoch-0) / args.max_epoch) ** (-args.T_decay)
     log('While extracting features T: {:.5f}'.format(temperature))
 
     all_feats, all_labels, all_probs = [], [], []

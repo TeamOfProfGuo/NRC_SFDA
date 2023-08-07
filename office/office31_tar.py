@@ -192,7 +192,7 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
             msoftmax1 = prob_tar1.mean(dim=0)
             mentropy_loss = torch.sum(msoftmax0 * torch.log(msoftmax0 + 1e-8)) +\
                             torch.sum(msoftmax1 * torch.log(msoftmax1 + 1e-8))
-            ce_loss += mentropy_loss * args.div
+            ce_loss += mentropy_loss * args.div_wt
 
         # model._momentum_update_teacher()
 
