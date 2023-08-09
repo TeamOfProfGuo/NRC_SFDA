@@ -16,7 +16,7 @@ from model.loss import compute_loss
 from torch.utils.data import DataLoader
 from dataset.data_list import ImageList
 from dataset.oh_data import office_load, moco_transform, image_target, mn_transform, mw_transform, get_RandAug, get_AutoAug
-from model.model_util import bn_adapt, label_propagation, extract_feature_labels, extract_features, normalize
+from model.model_util import bn_adapt, label_propagation, extract_feature_labels, extract_features, normalize, get_affinity
 
 
 def map_name(shot_name):
@@ -114,13 +114,12 @@ def train_target(args):
                                                                         args, log, epoch)
         if epoch==1: 
             feats_ori = copy.deepcopy(feats)
-        feats = feats_ori
+            W_ori = get_affinity(feats_ori, args)
 
         if args.feat_type == 'cls':
             pass
         elif args.feat_type == 'student' and epoch>=3:
-            # feats = extract_features(dset_loaders["test"], model.encoder_q, args)
-            feats = feats_ori
+            feats = extract_features(dset_loaders["test"], model.encoder_q, args)
         elif args.feat_type == 'teacher' and epoch>=3:
             feats = extract_features(dset_loaders["test"], model.encoder_k, args)
 
@@ -140,7 +139,8 @@ def train_target(args):
             pred_probs = pred_probs / pred_probs.sum(axis=1, keepdims=True) 
 
         # ====== label propagation ======
-        pred_labels, pred_probs, mean_acc, acc = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20, ret_acc=True)
+        W0 = None if epoch == 1 else W_ori
+        pred_labels, pred_probs, mean_acc, acc = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20, ret_acc=True, W0=W0)
         if acc > LP_MAX_ACC: 
             LP_MAX_ACC = acc
             LP_MAX_MEAN_ACC = mean_acc
@@ -327,6 +327,7 @@ if __name__ == "__main__":
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')
     parser.add_argument('--k', type=int, default=3, help='number of neighbors for label propagation')
+    parser.add_argument('--kk', type=int, default=10, help='number of neighbors for label propagation')
     parser.add_argument('--dk', action='store_true', default=False, help='decay k')
 
     parser.add_argument('--output', type=str, default='result/')

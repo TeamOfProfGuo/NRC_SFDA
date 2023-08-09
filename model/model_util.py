@@ -234,17 +234,7 @@ def bn_adapt1(netF, netB, data_loader, mom=0.1):
     return netF, netB
 
 
-def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20, ret_acc=False):
-    """
-    Args:
-        pred_label: current predicted label
-        feat: feature embedding for all samples (used for computing similarity)
-        label: GT label
-
-        alpha:
-        max_iter:
-    """
-    pred_label = pred_prob if args.lp_type > 0 else np.argmax(pred_prob, axis=1)
+def get_affinity(feat, args):
 
     # kNN search for the graph
     N, d = feat.shape[0], feat.shape[1]
@@ -262,11 +252,37 @@ def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20
     if args.w_type == 'poly':
         D = D[:, 1:] ** 3  # [N, k]
     else:
-        D = np.exp( (D[:, 1:]-1) / args.gamma )
+        D = np.exp((D[:, 1:] - 1) / args.gamma)
+
     I = I[:, 1:]
     row_idx = np.arange(N)
     row_idx_rep = np.tile(row_idx, (args.k, 1)).T
     W = scipy.sparse.csr_matrix((D.flatten('F'), (row_idx_rep.flatten('F'), I.flatten('F'))), shape=(N, N))
+    return W
+
+
+
+def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20, ret_acc=False, W0=None):
+    """
+    Args:
+        pred_label: current predicted label
+        feat: feature embedding for all samples (used for computing similarity)
+        label: GT label
+
+        alpha:
+        max_iter:
+    """
+    pred_label = pred_prob if args.lp_type > 0 else np.argmax(pred_prob, axis=1)
+    N = feat.shape[0]
+
+    # kNN search for the graph
+    W1 = get_affinity(feat, args)
+
+    if W0 is not None:
+        W = W1.copy() * ( (W0 > 0) + (W0 == 0) *0.5 )  # also nearest neighbor in W0
+        rk = scipy.stats.rankdata(W, method='average', axis=1,)
+        W = W * (rk > N-args.kk)
+
     W = W + W.T
 
     # Normalize the graph
