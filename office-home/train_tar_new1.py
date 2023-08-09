@@ -87,7 +87,7 @@ def train_target(args):
         netF, netB = bn_adapt(netF, netB, dset_loaders["target"], runs=1000)
 
     # ========== Define Model with Contrastive Branch ============
-    model = moco.MoCo(netF, netB, netC, dim=128, K=4096, m=0.999, T=0.07, mlp=True)
+    model = moco.MoCo(netF, netB, netC, dim=128, K=4096, m=0.999, T=0.07, mlp=False)
     model = model.cuda()
 
     param_group = [{'params': model.netF.parameters(), 'lr': args.lr * 0.1},
@@ -132,7 +132,7 @@ def train_target(args):
                 prob_list.pop(0)
             prob_avg = np.stack(prob_list, axis=0).mean(0)
             pred_probs = pred_probs / prob_avg
-            pred_probs = pred_probs / pred_probs.sum(dim=1, keepdim=True)
+            pred_probs = pred_probs / pred_probs.sum(axis=1, keepdims=True) 
 
         # ====== label propagation ======
         pred_labels, pred_probs, mean_acc, acc = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20, ret_acc=True)
@@ -317,6 +317,7 @@ if __name__ == "__main__":
     parser.add_argument('--T_decay', type=float, default=0.0, help='Temperature decay for creating pseudo-label')
     parser.add_argument('--w_type', type=str, default='poly', help='how to calculate weight of adjacency matrix', choices=['poly','exp'])
     parser.add_argument('--temperature', default=0.2, type=float, help='softmax temperature for graph regularization')
+    parser.add_argument('--contrast_th', default=0.8, type=float, help='pseudo label graph threshold') 
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')
