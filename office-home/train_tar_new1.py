@@ -1,6 +1,7 @@
 
 import sys
 import pdb
+import copy
 sys.path.append('./')
 
 import os.path as osp
@@ -87,7 +88,7 @@ def train_target(args):
         netF, netB = bn_adapt(netF, netB, dset_loaders["target"], runs=1000)
 
     # ========== Define Model with Contrastive Branch ============
-    model = moco.MoCo(netF, netB, netC, dim=128, K=4096, m=0.999, T=0.07, mlp=False)
+    model = moco.MoCo(netF, netB, netC, dim=128, K=4096, m=0.999, T=0.07, mlp=True)
     model = model.cuda()
 
     param_group = [{'params': model.netF.parameters(), 'lr': args.lr * 0.1},
@@ -111,12 +112,16 @@ def train_target(args):
         pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"],
                                                                         model.netF, model.netB, model.netC,
                                                                         args, log, epoch)
+        if epoch==1: 
+            feats_ori = copy.deepcopy(feats)
+        feats = feats_ori
 
         if args.feat_type == 'cls':
             pass
-        elif args.feat_type == 'student':
-            feats = extract_features(dset_loaders["test"], model.encoder_q, args)
-        elif args.feat_type == 'teacher':
+        elif args.feat_type == 'student' and epoch>=3:
+            # feats = extract_features(dset_loaders["test"], model.encoder_q, args)
+            feats = feats_ori
+        elif args.feat_type == 'teacher' and epoch>=3:
             feats = extract_features(dset_loaders["test"], model.encoder_k, args)
 
         Z = torch.zeros(len(dset_loaders['target'].dataset), args.class_num).float().numpy()  # intermediate values
@@ -295,7 +300,7 @@ if __name__ == "__main__":
     parser.add_argument('--classifier', type=str, default="bn", choices=["ori", "bn"])
 
     parser.add_argument('--bn_adapt', action='store_true', help='Whether to first finetune mu and std in BN layers')
-    parser.add_argument('--feat_type', type=str, default='cls', choices=['cls', 'teacher', 'student'])
+    parser.add_argument('--feat_type', type=str, default='student', choices=['cls', 'teacher', 'student'])
 
     parser.add_argument('--loss_type', type=str, default='dot', help='Loss function for target domain adaptation', choices=['ce', 'sce', 'dot', 'dot_d'])
     parser.add_argument('--loss_wt', type=str, default='en5', help='CE/SCE loss weight: e|p|n, c|n, 0-9')
