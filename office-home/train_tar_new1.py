@@ -9,12 +9,13 @@ import torch.optim as optim
 import random
 import argparse
 from utils import *
+import torch.nn.functional as F
 from model import moco, network
 from model.loss import compute_loss
 from torch.utils.data import DataLoader
 from dataset.data_list import ImageList
 from dataset.oh_data import office_load, moco_transform, image_target, mn_transform, mw_transform, get_RandAug, get_AutoAug
-from model.model_util import bn_adapt, label_propagation, extract_feature_labels, extract_features
+from model.model_util import bn_adapt, label_propagation, extract_feature_labels, extract_features, normalize
 
 
 def map_name(shot_name):
@@ -79,6 +80,7 @@ def train_target(args):
 
     FT_MAX_ACC, FT_MAX_MEAN_ACC = acc, mean_acc
     LP_MAX_ACC, LP_MAX_MEAN_ACC = acc, mean_acc
+    prob_list = []
     
     if args.bn_adapt:
         log("Adapt Batch Norm parameters")
@@ -124,6 +126,14 @@ def train_target(args):
             z = Z * (1. / (1. - args.lp_ma ** epoch))
             pred_probs = z
 
+        if args.da:
+            prob_list.append(pred_probs.mean(0))
+            if len(prob_list) > 10:
+                prob_list.pop(0)
+            prob_avg = np.stack(prob_list, axis=0).mean(0)
+            pred_probs = pred_probs / prob_avg
+            pred_probs = pred_probs / pred_probs.sum(dim=1, keepdim=True)
+
         # ====== label propagation ======
         pred_labels, pred_probs, mean_acc, acc = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20, ret_acc=True)
         if acc > LP_MAX_ACC: 
@@ -155,12 +165,11 @@ def train_target(args):
             LP_MAX_ACC * 100, LP_MAX_MEAN_ACC * 100, FT_MAX_ACC * 100, FT_MAX_MEAN_ACC * 100))
         
 
-
 def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
     # ======================== start training / adaptation
     model.train()
 
-    if args.loss_wt[1] == 'c':  # classwise weight
+    if args.loss_wt[1] == 'c':  # class-wise weight
         plabel_inique, plabel_cnt = np.unique(dset_loaders["target_ss"].dataset.plabel, return_counts=True)
         sorted_idx = np.argsort(plabel_inique)
         plabel_cnt = plabel_cnt.astype(np.float)
@@ -184,9 +193,9 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
             tempered = torch.pow(plabel, 1 / args.sharp)
             plabel = tempered / tempered.sum(dim=-1, keepdim=True)
 
-        logit_tar0 = model(img_tar[0])
+        logit_tar0, feat0 = model(img_tar[0], proj=True)
         prob_tar0 = nn.Softmax(dim=1)(logit_tar0)
-        logit_tar1 = model(img_tar[1])
+        logit_tar1, feat1 = model(img_tar[1], proj=True)
         prob_tar1 = nn.Softmax(dim=1)(logit_tar1)  # [B, K]
 
         if args.loss_wt[0] == 'e':  # entropy weight
@@ -217,10 +226,26 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
         #                               weight[0:5].cpu().numpy()))
 
         if img_tar[0].size(0) == args.batch_size and args.nce_wt>0:
-            output, target = model.moco_forward(im_q=img_tar[0], im_k=img_tar[1])
-            nce_loss = nn.CrossEntropyLoss()(output, target)
-            nce_wt = args.nce_wt * (1 + (epoch - 1) / args.max_epoch) ** (-args.nce_wt_decay)
-            loss = ce_loss + nce_wt * nce_loss
+
+            # embedding graph
+            feat0_n = F.normalize(feat0, p=2, dim=1)
+            feat1_n = F.normalize(feat1, p=2, dim=1)
+            sim = torch.exp(torch.mm(feat0_n, feat1_n.t()) / args.temperature)
+            sim_probs = sim / sim.sum(1, keepdim=True)
+
+            # pseudo-label graph
+            Q = torch.mm(plabel, plabel.t())    # plabel is soft label
+            Q.fill_diagonal_(1)
+            pos_mask = (Q >= args.contrast_th).float()
+
+            Q = Q * pos_mask
+            Q = Q / Q.sum(1, keepdim=True)
+
+            loss_contrast = - (torch.log(sim_probs + 1e-7) * Q).sum(1)
+            loss_contrast = loss_contrast.mean()
+
+            nce_wt = args.nce_wt  # * (1 + (epoch - 1) / args.max_epoch) ** (-args.nce_wt_decay)
+            loss = ce_loss + nce_wt * loss_contrast
         else:
             loss = ce_loss
 
@@ -260,7 +285,6 @@ if __name__ == "__main__":
     parser.add_argument('--interval', type=int, default=2)
     parser.add_argument('--worker', type=int, default=2, help="number of workers")
     parser.add_argument('--dset', type=str, default='a2r')
-    parser.add_argument('--choice', type=str, default='shot')
     parser.add_argument('--lr', type=float, default=0.01, help="learning rate")
     parser.add_argument('--seed', type=int, default=2021, help="random seed")
     
@@ -275,22 +299,24 @@ if __name__ == "__main__":
 
     parser.add_argument('--loss_type', type=str, default='dot', help='Loss function for target domain adaptation', choices=['ce', 'sce', 'dot', 'dot_d'])
     parser.add_argument('--loss_wt', type=str, default='en5', help='CE/SCE loss weight: e|p|n, c|n, 0-9')
-    parser.add_argument('--plabel_soft', action='store_false', help='Whether to use soft/hard pseudo label')   # 
-    parser.add_argument("--beta", type=float, default=5.0)
-    parser.add_argument("--alpha", type=float, default=1.0)
+    parser.add_argument('--plabel_soft', action='store_false', help='Whether to use soft/hard pseudo label')   #
     parser.add_argument('--data_aug', type=str, default='null', help='delimited list input')             # 0.2,0.5
     parser.add_argument('--data_trans', type=str, default='moco')
+
     parser.add_argument('--div_wt', type=float, default=0.0, help='weight for divergence')
-
-
-    parser.add_argument('--nce_wt', type=float, default=0.0, help='weight for nce loss')                 # 0.0
+    parser.add_argument('--nce_wt', type=float, default=0.0, help='weight for nce loss')  # 0.0
     parser.add_argument('--nce_wt_decay', type=float, default=0.0, help='0.0:no decay, larger value faster decay')
+
+    parser.add_argument("--beta", type=float, default=5.0)
+    parser.add_argument("--alpha", type=float, default=1.0)
 
     parser.add_argument('--lp_ma', type=float, default=0.0, help='label used for LP is based on MA or not')
     parser.add_argument('--lp_type', type=float, default=1.0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
     parser.add_argument('--sharp', type=float, default=1.0, help="sharpen the pseudo-label")
-    parser.add_argument('--T_decay', type=float, default=1.0, help='Temperature decay for creating pseudo-label')
+    parser.add_argument('--da', action='store_true', default=False, help='flag for distribution alignment of the preds')
+    parser.add_argument('--T_decay', type=float, default=0.0, help='Temperature decay for creating pseudo-label')
     parser.add_argument('--w_type', type=str, default='poly', help='how to calculate weight of adjacency matrix', choices=['poly','exp'])
+    parser.add_argument('--temperature', default=0.2, type=float, help='softmax temperature for graph regularization')
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')

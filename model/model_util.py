@@ -12,6 +12,12 @@ from sklearn.metrics import confusion_matrix
 from scipy.spatial.distance import cdist
 
 
+def normalize(x, power=2):
+    norm = x.pow(power).sum(1, keepdim=True).pow(1. / power)
+    out = x.div(norm)
+    return out
+
+
 def compute_acc(labels, preds):
     """
     Args:
