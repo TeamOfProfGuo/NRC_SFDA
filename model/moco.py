@@ -155,10 +155,15 @@ class MoCo(nn.Module):
 
         return logits, labels
 
-    def forward(self, img):
-        out = self.netB(self.netF(img))
-        out = self.netC(out)
-        return out
+    def forward(self, img, proj=False):
+        h = self.netF(img)
+        out = self.netC(self.netB(h))
+
+        if proj:
+            feat = self.projection_layer(h)
+            return out, feat
+        else:
+            return out
 
 
 class UniModel(nn.Module):
