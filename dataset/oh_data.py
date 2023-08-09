@@ -163,7 +163,7 @@ def mw_transform(min_scales=None):
 
 
 def get_AutoAug(args):
-    min_scales = args.data_aug
+    min_scales = args.data_aug if args.data_aug is not None else [0.2, 0.5]
     if args.data_trans == 'ai':
         policy = transforms.AutoAugmentPolicy.IMAGENET
     elif args.data_trans == 'ac':
