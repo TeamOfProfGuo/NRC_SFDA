@@ -261,6 +261,16 @@ def get_affinity(feat, args):
     return W
 
 
+def keep_top_n(matrix, n):
+    """Return index of top n values in each row of a sparse matrix."""
+
+    for le, ri in zip(matrix.indptr[:-1], matrix.indptr[1:]):
+        n_row_pick = min(n, ri - le)  # non-zero values of first row -> index in data array
+        idx = np.argpartition(matrix.data[le:ri], -n_row_pick)[:-n_row_pick]   # non-top
+        matrix.data[idx + le] = 0
+
+    return matrix
+
 
 def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20, ret_acc=False, W0=None):
     """
@@ -279,9 +289,10 @@ def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20
     W1 = get_affinity(feat, args)
 
     if W0 is not None:
-        W = W1.copy() * ( (W0 > 0) + (W0 == 0) *0.5 )  # also nearest neighbor in W0
-        rk = scipy.stats.rankdata(W, method='average', axis=1,)
-        W = W * (rk > N-args.kk)
+        W = W1.copy() * ((W0 > 0)*0.5 + (W1 > 0)*0.5)  # also nearest neighbor in W0
+        W = keep_top_n(W, args.kk)
+    else:
+        W = W1
 
     W = W + W.T
 
