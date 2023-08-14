@@ -1,5 +1,6 @@
 # encoding:utf-8
 import pdb
+import pickle
 import numpy as np
 import os.path as osp
 from datetime import date
@@ -13,7 +14,7 @@ from torch.utils.data import DataLoader
 from model import network, moco
 from dataset.data_list import ImageList
 from dataset.visda_data import data_load, image_train, moco_transform, mm_transform, mn_transform
-from model.model_util import bn_adapt, bn_adapt1, label_propagation, extract_feature_labels, extract_features
+from model.model_util import bn_adapt, bn_adapt1, label_propagation, extract_feature_labels, extract_features, get_affinity
 from model.loss import compute_loss
 from dataset.data_transform import TransformSW
 from utils import cal_acc, print_args, log, set_log_path
@@ -95,6 +96,10 @@ def analysis_target(args):
         model.eval()
         pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"], model.netF, model.netB, model.netC, args, log, epoch)
 
+        if epoch==1 and (args.fuse_af>=1 or args.feat_type=='o'):
+            feats_ori = copy.deepcopy(feats)
+            W_ori = get_affinity(feats_ori, args)
+
         
         Z = torch.zeros(len(dset_loaders['target'].dataset), args.class_num).float().numpy()       # intermediate values
         z = torch.zeros(len(dset_loaders['target'].dataset), args.class_num).float().numpy()       # temporal outputs
@@ -104,7 +109,28 @@ def analysis_target(args):
             pred_probs = z
 
         # ============ label propagation ============
-        pred_labels, pred_probs, mean_acc, acc = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20, ret_acc=True)
+        if args.fuse_af < 0:
+            W0 = None
+        elif args.fuse_af == 0:
+            W0 = W_ori if epoch >= 2 else None
+        elif args.fuse_af >= 1:
+            if epoch == 0:
+                W0 = None
+            elif (epoch >= 1) and (epoch <= args.fuse_af):
+                W0 = W_ori
+            else:
+                fname = osp.join(args.output_dir, 'w{}.pickle'.format(epoch - args.fuse_af))
+                with open(fname, 'rb') as f:
+                    W0 = pickle.load(f)
+                log('load W0 from {}'.format(fname))
+
+        pred_labels, pred_probs, mean_acc, acc, W_new = label_propagation(pred_probs, feats, labels, args, log,
+                                                                          alpha=0.99, max_iter=20, ret_acc=True, W0=W0,
+                                                                          ret_W=True)
+        fname = osp.join(args.output_dir, 'w{}.pickle'.format(epoch))
+        with open(fname, 'wb') as f:
+            pickle.dump(W_new, f)
+
         if mean_acc > LP_MAX_MEAN_ACC:
             LP_MAX_ACC = acc
             LP_MAX_MEAN_ACC = mean_acc
@@ -184,6 +210,13 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
         ce_loss1 = compute_loss(plabel, prob_tar1, type=args.loss_type, weight=weight, cls_weight=cls_weight, soft_flag=args.plabel_soft)
         ce_loss = 2.0 * ce0_wt * ce_loss0 + 2.0 * ce1_wt * ce_loss1
 
+        if args.div_wt > 0.0:
+            msoftmax0 = prob_tar0.mean(dim=0)
+            msoftmax1 = prob_tar1.mean(dim=0)
+            mentropy_loss = torch.sum(msoftmax0 * torch.log(msoftmax0 + 1e-8)) +\
+                            torch.sum(msoftmax1 * torch.log(msoftmax1 + 1e-8))
+            ce_loss += mentropy_loss * args.div_wt
+
 
         # if iter_num == 0 and epoch == 1:
         #     log('pred0 {}, pred1 {}'.format(prob_tar0[0].cpu().detach().numpy(), prob_tar1[0].cpu().detach().numpy()))
@@ -238,7 +271,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--lp_type', type=float, default=0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
     parser.add_argument('--T_decay', type=float, default=1.0, help='Temperature decay of creating pseudo-label in feature extraction')
-    parser.add_argument('--feat_type', type=str, default='cls', choices=['cls', 'teacher', 'student'])
+    parser.add_argument('--feat_type', type=str, default='cls', choices=['cls', 'teacher', 'student', 't', 's', 'o'])
     parser.add_argument('--nce_wt', type=float, default=1.0, help='weight for nce loss')
     parser.add_argument('--nce_wt_decay', type=float, default=0.0, help='0.0:no decay, larger value faster decay')
 
@@ -250,16 +283,21 @@ if __name__ == "__main__":
     parser.add_argument('--data_aug', type=str, default='0.2,0.5', help='delimited list input')
     parser.add_argument('--w_type', type=str, default='poly', help='how to calculate weight of adjacency matrix', choices=['poly','exp'])
     parser.add_argument('--gamma', type=float, default=1.0)
+    parser.add_argument('--div_wt', type=float, default=0.0, help='weight for divergence')
 
     parser.add_argument('--lp_ma', type=float, default=0.0, help='label used for LP is based on MA or not')
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')
     parser.add_argument('--k', type=int, default=5, help='number of neighbors for label propagation')
+    parser.add_argument('--kk', type=int, default=3, help='number of neighbors for label propagation')
+    parser.add_argument('--fuse_af', type=int, default=0, help='fuse affinity')
+    parser.add_argument('--fuse_type', type=str, default='c', help='how to fuse affinity')  # c|m
 
     parser.add_argument('--output', type=str, default='result/')
     parser.add_argument('--exp_name', type=str, default='unim_en5_dot')
     parser.add_argument('--data_trans', type=str, default='moco')
+    parser.add_argument('--debug', action='store_true', default=False)
     args = parser.parse_args()
 
     if args.data_aug != 'null':
@@ -268,6 +306,8 @@ if __name__ == "__main__":
         args.data_aug = None
     if args.loss_type == 'dot' or args.loss_type == 'dot_d':
         args.plabel_soft = True
+    if (args.fuse_af >= 0) and (args.k <= args.kk):
+        args.k = args.kk*3
 
     if args.dset == 'office-home':
         names = ['Art', 'Clipart', 'Product', 'RealWorld']

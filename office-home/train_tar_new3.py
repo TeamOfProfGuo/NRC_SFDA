@@ -371,7 +371,7 @@ if __name__ == "__main__":
         args.data_aug = None
     if args.loss_type == 'dot' or args.loss_type == 'dot_d':
         args.plabel_soft = True
-    if (args.fuse_af > 0) and (args.k <= args.kk): 
+    if (args.fuse_af >= 0) and (args.k <= args.kk):
         args.k = args.kk*3
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id

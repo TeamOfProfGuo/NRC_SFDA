@@ -1,5 +1,5 @@
 import argparse
-import os, sys
+import os, sys, pickle
 
 sys.path.append("./")
 
@@ -11,7 +11,7 @@ from model import network, moco
 from model.loss import compute_loss
 from dataset.data_list import ImageList
 from dataset.office_data import office_load, moco_transform, image_target, mn_transform, get_AutoAug, mw_transform, get_RandAug
-from model.model_util import bn_adapt, label_propagation, extract_feature_labels, extract_features
+from model.model_util import bn_adapt, label_propagation, extract_feature_labels, extract_features, get_affinity
 from torch.utils.data import DataLoader
 import random, pdb, math, copy
 from tqdm import tqdm
@@ -98,6 +98,9 @@ def train_target(args):
         pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"],
                                                                         model.netF, model.netB, model.netC,
                                                                         args, log, epoch)
+        if epoch==1 and (args.fuse_af>=1 or args.feat_type=='o'):
+            feats_ori = copy.deepcopy(feats)
+            W_ori = get_affinity(feats_ori, args)
 
         Z = torch.zeros(len(dset_loaders['target'].dataset), args.class_num).float().numpy()  # intermediate values
         z = torch.zeros(len(dset_loaders['target'].dataset), args.class_num).float().numpy()  # temporal outputs
@@ -107,8 +110,28 @@ def train_target(args):
             pred_probs = z
 
         # ====== label propagation ======
-        pred_labels, pred_probs, mean_acc, acc = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99,
-                                                                   max_iter=20, ret_acc=True)
+        if args.fuse_af < 0:
+            W0 = None
+        elif args.fuse_af == 0:
+            W0 = W_ori if epoch >= 2 else None
+        elif args.fuse_af >= 1:
+            if epoch == 0:
+                W0 = None
+            elif (epoch >= 1) and (epoch <= args.fuse_af):
+                W0 = W_ori
+            else:
+                fname = osp.join(args.output_dir, 'w{}.pickle'.format(epoch - args.fuse_af))
+                with open(fname, 'rb') as f:
+                    W0 = pickle.load(f)
+                log('load W0 from {}'.format(fname))
+
+        pred_labels, pred_probs, mean_acc, acc, W_new = label_propagation(pred_probs, feats, labels, args, log,
+                                                                          alpha=0.99, max_iter=20, ret_acc=True, W0=W0,
+                                                                          ret_W=True)
+        fname = osp.join(args.output_dir, 'w{}.pickle'.format(epoch))
+        with open(fname, 'wb') as f:
+            pickle.dump(W_new, f)
+
         if acc > LP_MAX_ACC:
             LP_MAX_ACC = acc
             LP_MAX_MEAN_ACC = mean_acc
@@ -250,15 +273,19 @@ if __name__ == "__main__":
 
     parser.add_argument('--lp_ma', type=float, default=0.0, help='label used for LP is based on MA or not')
     parser.add_argument('--lp_type', type=float, default=1.0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
-    parser.add_argument('--T_decay', type=float, default=1.0, help='Temperature decay for creating pseudo-label')
+    parser.add_argument('--T_decay', type=float, default=0.0, help='Temperature decay for creating pseudo-label')
     parser.add_argument('--w_type', type=str, default='poly', help='how to calculate weight of adjacency matrix', choices=['poly','exp'])
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')
     parser.add_argument('--k', type=int, default=3, help='number of neighbors for label propagation')
+    parser.add_argument('--kk', type=int, default=3, help='number of neighbors for label propagation')
+    parser.add_argument('--fuse_af', type=int, default=0, help='fuse affinity')
+    parser.add_argument('--fuse_type', type=str, default='c', help='how to fuse affinity')  # c|m
 
     parser.add_argument('--output', type=str, default='result/')
     parser.add_argument('--exp_name', type=str, default='moco_nce5_pn5_k3')
+    parser.add_argument('--debug', action='store_true', default=False)
     args = parser.parse_args()
 
     if args.data_aug != 'null':
@@ -267,6 +294,8 @@ if __name__ == "__main__":
         args.data_aug = None
     if args.loss_type == 'dot' or args.loss_type == 'dot_d':
         args.plabel_soft = True
+    if (args.fuse_af >= 0) and (args.k <= args.kk):
+        args.k = args.kk*3
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
     SEED = args.seed

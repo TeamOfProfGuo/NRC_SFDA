@@ -21,14 +21,14 @@ singularity exec --nv \
 --overlay ${ext3_path}:ro \
 ${sif_path} /bin/bash -c "
 source /ext3/env.sh
-python -m office.office31_tar --dset a2d --loss_type dot  --loss_wt en5 --div_wt 0.0 --data_trans mw --data_aug 0.5,0.5 --lp_type 0.25 --T_decay 0.0  --exp_name unim_dot_en5_mw_lp025
-python -m office.office31_tar --dset a2w --loss_type dot  --loss_wt en5 --div_wt 0.0 --data_trans mw --data_aug 0.5,0.5 --lp_type 0.25 --T_decay 0.0  --exp_name unim_dot_en5_mw_lp025
+python -m office.office31_tar --dset a2d --loss_type dot  --loss_wt en5 --div_wt 0.1 --data_trans mw --data_aug 0.5,0.5 --lp_type 0.5 --fuse_af 0 --fuse_type m --debug --exp_name dot_en5_mw_lp05_div01_af0m
+python -m office.office31_tar --dset a2w --loss_type dot  --loss_wt en5 --div_wt 0.1 --data_trans mw --data_aug 0.5,0.5 --lp_type 0.5 --fuse_af 0 --fuse_type m --debug  --exp_name dot_en5_mw_lp05_div01_af0m
 
-python -m office.office31_tar --dset d2a --loss_type dot  --loss_wt en5 --div_wt 0.0 --data_trans mw --data_aug 0.5,0.5 --lp_type 0.25 --T_decay 0.0  --exp_name unim_dot_en5_mw_lp025 
-python -m office.office31_tar --dset d2w --loss_type dot  --loss_wt en5 --div_wt 0.0 --data_trans mw --data_aug 0.5,0.5 --lp_type 0.25 --T_decay 0.0  --exp_name unim_dot_en5_mw_lp025 
+python -m office.office31_tar --dset d2a --loss_type dot  --loss_wt en5 --div_wt 0.1 --data_trans mw --data_aug 0.5,0.5 --lp_type 0.5 --fuse_af 0 --fuse_type m --debug  --exp_name dot_en5_mw_lp05_div01_af0m
+python -m office.office31_tar --dset d2w --loss_type dot  --loss_wt en5 --div_wt 0.1 --data_trans mw --data_aug 0.5,0.5 --lp_type 0.5 --fuse_af 0 --fuse_type m --debug  --exp_name dot_en5_mw_lp05_div01_af0m
 
-python -m office.office31_tar --dset w2a --loss_type dot  --loss_wt en5 --div_wt 0.0 --data_trans mw --data_aug 0.5,0.5 --lp_type 0.25 --T_decay 0.0  --exp_name unim_dot_en5_mw_lp025 
-python -m office.office31_tar --dset w2d --loss_type dot  --loss_wt en5 --div_wt 0.0 --data_trans mw --data_aug 0.5,0.5 --lp_type 0.25 --T_decay 0.0  --exp_name unim_dot_en5_mw_lp025 
+python -m office.office31_tar --dset w2a --loss_type dot  --loss_wt en5 --div_wt 0.1 --data_trans mw --data_aug 0.5,0.5 --lp_type 0.5 --fuse_af 0 --fuse_type m --debug  --exp_name dot_en5_mw_lp05_div01_af0m
+python -m office.office31_tar --dset w2d --loss_type dot  --loss_wt en5 --div_wt 0.1 --data_trans mw --data_aug 0.5,0.5 --lp_type 0.5 --fuse_af 0 --fuse_type m --debug  --exp_name dot_en5_mw_lp05_div01_af0m
 "
 
 
