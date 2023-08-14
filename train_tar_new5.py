@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 
 from model import network, moco
 from dataset.data_list import ImageList
-from dataset.visda_data import data_load, image_train, moco_transform, mm_transform, mn_transform
+from dataset.visda_data import data_load, image_train, moco_transform, mm_transform, mn_transform, mr_transform
 from model.model_util import bn_adapt, bn_adapt1, label_propagation, extract_feature_labels, extract_features, get_affinity
 from model.loss import compute_loss
 from dataset.data_transform import TransformSW
@@ -34,6 +34,8 @@ def reset_data_load(dset_loaders, pred_prob, args, moco_load=False):
         data_trans = mm_transform(min_scales=args.data_aug)
     elif args.data_trans == 'mn':
         data_trans = mn_transform(min_scales=args.data_aug)
+    elif args.data_trans == 'mr':
+        data_trans = mr_transform()
     else:
         data_trans = image_train()
     dsets = ImageList(txt_tar, transform=data_trans, root=os.path.dirname(args.t_dset_path), ret_idx=True, pprob=pred_prob, ret_plabel=True, args=args)

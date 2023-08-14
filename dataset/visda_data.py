@@ -102,7 +102,7 @@ def mn_transform(min_scales=None):
         m_scale = min_scales[0]
 
     return TwoCropsTransform(
-        transforms.Compose(get_moco_base_augmentation0()),
+        transforms.Compose(get_moco_base_augmentation0(min_scale=m_scale)),
         transforms.Compose([
             transforms.Resize((256, 256)),
             transforms.CenterCrop(224),
@@ -114,7 +114,23 @@ def mn_transform(min_scales=None):
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
     )
-    
+
+
+def mr_transform(min_scales=None):
+
+    num_ops, magnitude = 2, 9
+    return TwoCropsTransform(
+        transforms.Compose(get_moco_base_augmentation0()),
+        transforms.Compose([
+            transforms.Resize((256, 256)),
+            transforms.CenterCrop(224),
+            transforms.RandAugment(num_ops, magnitude),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+    )
+
 
 def data_load(args, ss_load=None):
     ## prepare data

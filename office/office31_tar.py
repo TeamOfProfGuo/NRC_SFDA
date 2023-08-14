@@ -10,7 +10,7 @@ from torchvision import transforms
 from model import network, moco
 from model.loss import compute_loss
 from dataset.data_list import ImageList
-from dataset.office_data import office_load, moco_transform, image_target, mn_transform, get_AutoAug, mw_transform, get_RandAug
+from dataset.office_data import office_load, moco_transform, image_target, mn_transform, get_AutoAug, mw_transform, get_RandAug, mr_transform
 from model.model_util import bn_adapt, label_propagation, extract_feature_labels, extract_features, get_affinity
 from torch.utils.data import DataLoader
 import random, pdb, math, copy
@@ -44,6 +44,8 @@ def reset_data_load(dset_loaders, pred_prob, args,):
         data_trans = get_RandAug(args)
     elif args.data_trans == 'mw':
         data_trans = mw_transform()
+    elif args.data_trans == 'mr':
+        data_trans = mr_transform()
     else:
         data_trans = image_target()
 
