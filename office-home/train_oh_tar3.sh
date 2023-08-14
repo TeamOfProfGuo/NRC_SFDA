@@ -22,21 +22,21 @@ singularity exec --nv \
 --overlay ${ext3_path}:ro \
 ${sif_path} /bin/bash -c "
 source /ext3/env.sh
-python -m office-home.train_tar_new3 --dset a2c --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 8 --k 10 --fuse_type m --debug --exp_name dot_en5_mc25_lp05_div01_af8m
-python -m office-home.train_tar_new3 --dset a2p --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 8 --k 10 --fuse_type m --debug --exp_name dot_en5_mc25_lp05_div01_af8m
-python -m office-home.train_tar_new3 --dset a2r --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 8 --k 10 --fuse_type m --debug --exp_name dot_en5_mc25_lp05_div01_af8m
+python -m office-home.train_tar_new3 --dset a2c --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 10 --k 10 --fuse_type c --debug --exp_name dot_en5_mc25_lp05_div01_af10c
+python -m office-home.train_tar_new3 --dset a2p --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 10 --k 10 --fuse_type c --debug --exp_name dot_en5_mc25_lp05_div01_af10c
+python -m office-home.train_tar_new3 --dset a2r --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 10 --k 10 --fuse_type c --debug --exp_name dot_en5_mc25_lp05_div01_af10c
 
-python -m office-home.train_tar_new3 --dset c2a --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 8 --k 10 --fuse_type m --debug --exp_name dot_en5_mc25_lp05_div01_af8m
-python -m office-home.train_tar_new3 --dset c2p --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 8 --k 10 --fuse_type m --debug --exp_name dot_en5_mc25_lp05_div01_af8m
-python -m office-home.train_tar_new3 --dset c2r --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 8 --k 10 --fuse_type m --debug --exp_name dot_en5_mc25_lp05_div01_af8m
+python -m office-home.train_tar_new3 --dset c2a --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 10 --k 10 --fuse_type c --debug --exp_name dot_en5_mc25_lp05_div01_af10c
+python -m office-home.train_tar_new3 --dset c2p --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 10 --k 10 --fuse_type c --debug --exp_name dot_en5_mc25_lp05_div01_af10c
+python -m office-home.train_tar_new3 --dset c2r --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 10 --k 10 --fuse_type c --debug --exp_name dot_en5_mc25_lp05_div01_af10c
 
-python -m office-home.train_tar_new3 --dset p2a --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 8 --k 10 --fuse_type m --debug --exp_name dot_en5_mc25_lp05_div01_af8m
-python -m office-home.train_tar_new3 --dset p2c --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 8 --k 10 --fuse_type m --debug --exp_name dot_en5_mc25_lp05_div01_af8m
-python -m office-home.train_tar_new3 --dset p2r --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 8 --k 10 --fuse_type m --debug --exp_name dot_en5_mc25_lp05_div01_af8m
+python -m office-home.train_tar_new3 --dset p2a --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 10 --k 10 --fuse_type c --debug --exp_name dot_en5_mc25_lp05_div01_af10c
+python -m office-home.train_tar_new3 --dset p2c --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 10 --k 10 --fuse_type c --debug --exp_name dot_en5_mc25_lp05_div01_af10c
+python -m office-home.train_tar_new3 --dset p2r --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 10 --k 10 --fuse_type c --debug --exp_name dot_en5_mc25_lp05_div01_af10c
 
-python -m office-home.train_tar_new3 --dset r2a --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 8 --k 10 --fuse_type m --debug --exp_name dot_en5_mc25_lp05_div01_af8m
-python -m office-home.train_tar_new3 --dset r2c --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 8 --k 10 --fuse_type m --debug --exp_name dot_en5_mc25_lp05_div01_af8m
-python -m office-home.train_tar_new3 --dset r2p --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 8 --k 10 --fuse_type m --debug --exp_name dot_en5_mc25_lp05_div01_af8m
+python -m office-home.train_tar_new3 --dset r2a --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 10 --k 10 --fuse_type c --debug --exp_name dot_en5_mc25_lp05_div01_af10c
+python -m office-home.train_tar_new3 --dset r2c --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 10 --k 10 --fuse_type c --debug --exp_name dot_en5_mc25_lp05_div01_af10c
+python -m office-home.train_tar_new3 --dset r2p --loss_type dot --loss_wt en5 --lp_type 0.5 --data_trans moco --data_aug 0.2,0.5 --div_wt 0.1 --nce_wt 0.0 --fuse_af 10 --k 10 --fuse_type c --debug --exp_name dot_en5_mc25_lp05_div01_af10c
 
 
 "

@@ -332,7 +332,7 @@ def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20
             W = combine_W(W1, W0)
         W = keep_top_n(W, args.kk)
     else:
-        W = W1
+        W = keep_top_n(W1, args.kk)
         
     if args.debug and (W0 is not None): 
         W00, W11 = copy.deepcopy(W0), copy.deepcopy(W1)

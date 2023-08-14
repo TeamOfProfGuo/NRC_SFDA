@@ -98,7 +98,7 @@ def train_target(args):
         pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"],
                                                                         model.netF, model.netB, model.netC,
                                                                         args, log, epoch)
-        if epoch==1 and (args.fuse_af>=1 or args.feat_type=='o'):
+        if epoch==1 and (args.fuse_af>=0):
             feats_ori = copy.deepcopy(feats)
             W_ori = get_affinity(feats_ori, args)
 
@@ -117,20 +117,25 @@ def train_target(args):
         elif args.fuse_af >= 1:
             if epoch == 0:
                 W0 = None
-            elif (epoch >= 1) and (epoch <= args.fuse_af):
+            elif (epoch >= 1) and (epoch <= args.fuse_af + 1):
                 W0 = W_ori
             else:
-                fname = osp.join(args.output_dir, 'w{}.pickle'.format(epoch - args.fuse_af))
-                with open(fname, 'rb') as f:
-                    W0 = pickle.load(f)
-                log('load W0 from {}'.format(fname))
+                if (epoch - args.fuse_af)%2 == 0 : 
+                    fname = osp.join(args.output_dir, 'w{}.pickle'.format(epoch - args.fuse_af + 1))
+                    with open(fname, 'rb') as f:
+                        W0 = pickle.load(f)
+                    log('load W0 from {}'.format(fname))
+                else: 
+                    log('load W0 from previous epoch')
 
         pred_labels, pred_probs, mean_acc, acc, W_new = label_propagation(pred_probs, feats, labels, args, log,
                                                                           alpha=0.99, max_iter=20, ret_acc=True, W0=W0,
                                                                           ret_W=True)
-        fname = osp.join(args.output_dir, 'w{}.pickle'.format(epoch))
-        with open(fname, 'wb') as f:
-            pickle.dump(W_new, f)
+        if args.fuse_af >= 1: 
+            if epoch % 2 == 1: 
+                fname = osp.join(args.output_dir, 'w{}.pickle'.format(epoch))
+                with open(fname, 'wb') as f:
+                    pickle.dump(W_new, f)
 
         if acc > LP_MAX_ACC:
             LP_MAX_ACC = acc
