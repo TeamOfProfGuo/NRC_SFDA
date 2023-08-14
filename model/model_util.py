@@ -1,5 +1,6 @@
 
 import pdb
+import copy
 import numpy as np
 import scipy
 import scipy.stats
@@ -271,8 +272,43 @@ def keep_top_n(matrix, n):
 
     return matrix
 
+# Acc for W0, W1, and W
+def get_af_acc(WW, label, args):
+    N = len(label)
+    acc_list = []
+    for i in range(N):
+        gt_label = label[i]
+        le, ri = i*args.k, (i+1)*args.k  # le, ri = WW.indptr[i], WW.indptr[i+1]
+        idx = (np.where(WW.data[le:ri]>0))[0] # idx for WW.indices 
+        index = WW.indices[le: ri][idx]       # idx for nearest neighbors
+        nn_label = label[index]
+        acc_i = (nn_label == gt_label).sum()/len(nn_label)
+        acc_list.append(acc_i)
+    acc = np.mean(np.array(acc_list))
+    return acc
 
-def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20, ret_acc=False, W0=None):
+
+def combine_W(W1, W0, min_decay=0.5): 
+    W = copy.deepcopy(W1)
+    for i in range(W0.shape[0]):    # to define the multiplier of W1
+        le, ri = W0.indptr[i], W0.indptr[i+1] 
+        row_idx0 = W0.indices[le:ri] # idx of NN 
+        row_idx1 = W1.indices[le:ri] # idx of NN 
+        dt0 = W0.data[le:ri]     # similarity with NN
+        
+        M = row_idx1[:,None] == row_idx0
+        match_idx = [np.nonzero(m)[0] for m in M]
+        min_dt0 = np.min(dt0, keepdims=True) * min_decay
+        match_v = [dt0[i] if len(i)>0 else min_dt0 for i in match_idx]
+        new_dt1 = np.concatenate(match_v)
+        
+        W.data[le:ri] = new_dt1 # * (1/np.max(new_dt1))
+    
+    W = W.multiply(W1)
+    return W*5
+
+
+def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20, ret_acc=False, W0=None, ret_W=False):
     """
     Args:
         pred_label: current predicted label
@@ -287,12 +323,25 @@ def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20
 
     # kNN search for the graph
     W1 = get_affinity(feat, args)
+    Wc = copy.deepcopy(W1)
 
     if W0 is not None:
-        W = W1.copy() * ((W0 > 0)*0.5 + (W1 > 0)*0.5)  # also nearest neighbor in W0
+        if args.fuse_type == 'c':
+            W = W1.copy() .multiply( ((W0 > 0)*0.5 + (W1 > 0)*0.5) ) # also nearest neighbor in W0
+        elif args.fuse_type == 'm':
+            W = combine_W(W1, W0)
         W = keep_top_n(W, args.kk)
     else:
         W = W1
+        
+    if args.debug and (W0 is not None): 
+        W00, W11 = copy.deepcopy(W0), copy.deepcopy(W1)
+        W00 = keep_top_n(W00, args.kk)
+        W11 = keep_top_n(W11, args.kk) 
+        acc0 = get_af_acc(W00, label, args)
+        acc1 = get_af_acc(W11, label, args)
+        acc  = get_af_acc(W,   label, args)
+        log('>>>>>>> acc0: {:.4f}, acc1: {:.4f}, acc: {:.4f}'.format(acc0, acc1, acc))
 
     W = W + W.T
 
@@ -330,7 +379,10 @@ def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20
     log('After label propagation Acc: {:.2f}%, Mean Acc: {:.2f}%'.format(new_acc*100, mean_acc*100))
     
     if ret_acc:
-        return new_pred, probs_l1, mean_acc, new_acc
+        if ret_W: 
+            return new_pred, probs_l1, mean_acc, new_acc, Wc
+        else:
+            return new_pred, probs_l1, mean_acc, new_acc
     else: 
         return new_pred, probs_l1
 

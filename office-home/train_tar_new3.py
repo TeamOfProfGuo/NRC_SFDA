@@ -2,6 +2,7 @@
 import sys
 import pdb
 import copy
+import pickle
 sys.path.append('./')
 
 import os.path as osp
@@ -88,7 +89,7 @@ def train_target(args):
         netF, netB = bn_adapt(netF, netB, dset_loaders["target"], runs=1000)
 
     # ========== Define Model with Contrastive Branch ============
-    model = moco.MoCo(netF, netB, netC, dim=128, K=4096, m=0.999, T=0.07, mlp=True, bn=args.moco_bn)
+    model = moco.MoCo(netF, netB, netC, dim=128, K=4096, m=0.999, T=0.07, mlp=True)
     model = model.cuda()
 
     param_group = [{'params': model.netF.parameters(), 'lr': args.lr * 0.1},
@@ -98,10 +99,6 @@ def train_target(args):
 
     optimizer = optim.SGD(param_group, momentum=0.9, weight_decay=1e-3, nesterov=True)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
-    if args.fuse_af == 2: 
-        W_pre1 = None
-    elif args.fuse_af == 3: 
-        W_pre1, W_pre2 = None, None
 
     # ======================= start training =======================
     for epoch in range(1, args.max_epoch + 1):
@@ -116,7 +113,7 @@ def train_target(args):
         pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"],
                                                                         model.netF, model.netB, model.netC,
                                                                         args, log, epoch)
-        if epoch==1 and (args.fuse_af==0 or args.feat_type=='o'): 
+        if epoch==1 and (args.fuse_af>=1 or args.feat_type=='o'): 
             feats_ori = copy.deepcopy(feats)
             W_ori = get_affinity(feats_ori, args)
 
@@ -145,15 +142,25 @@ def train_target(args):
             pred_probs = pred_probs / pred_probs.sum(axis=1, keepdims=True) 
 
         # ====== label propagation ======
-        if args.fuse_af == 1 and epoch >= 2: 
-            W0 = W_ori
-        elif args.fuse_af == 2:
-            W0 = W_pre1
-        elif args.fuse_af == 3: 
-            W0 = W_pre2
-        else: 
+        if args.fuse_af < 0: 
             W0 = None
+        elif args.fuse_af == 0: 
+            W0 = W_ori if epoch >= 2 else None
+        elif args.fuse_af >= 1: 
+            if epoch == 0: 
+                W0 = None
+            elif (epoch >= 1) and (epoch <= args.fuse_af): 
+                W0 = W_ori
+            else: 
+                fname = osp.join(args.output_dir, 'w{}.pickle'.format(epoch - args.fuse_af))
+                with open(fname, 'rb') as f:
+                    W0 = pickle.load(f)
+                log('load W0 from {}'.format(fname))
+         
         pred_labels, pred_probs, mean_acc, acc, W_new = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20, ret_acc=True, W0=W0, ret_W=True)
+        fname = osp.join(args.output_dir, 'w{}.pickle'.format(epoch))
+        with open(fname, 'wb') as f:
+            pickle.dump(W_new, f)
         
         if args.fuse_af == 2: 
             W_pre1 = W_new
@@ -343,7 +350,6 @@ if __name__ == "__main__":
     parser.add_argument('--w_type', type=str, default='poly', help='how to calculate weight of adjacency matrix', choices=['poly','exp'])
     parser.add_argument('--temperature', default=0.2, type=float, help='softmax temperature for graph regularization')
     parser.add_argument('--contrast_th', default=0.8, type=float, help='pseudo label graph threshold') 
-    parser.add_argument('--moco_bn', default=0, type=int, help='whether there is bn in mlp') 
 
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')

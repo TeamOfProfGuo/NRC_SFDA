@@ -98,6 +98,10 @@ def train_target(args):
 
     optimizer = optim.SGD(param_group, momentum=0.9, weight_decay=1e-3, nesterov=True)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
+    if args.fuse_af == 2: 
+        W_pre1 = None
+    elif args.fuse_af == 3: 
+        W_pre1, W_pre2 = None, None
 
     # ======================= start training =======================
     for epoch in range(1, args.max_epoch + 1):
@@ -112,15 +116,17 @@ def train_target(args):
         pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"],
                                                                         model.netF, model.netB, model.netC,
                                                                         args, log, epoch)
-        if epoch==1: 
+        if epoch==1 and (args.fuse_af==1 or args.feat_type=='o'): 
             feats_ori = copy.deepcopy(feats)
             W_ori = get_affinity(feats_ori, args)
 
         if args.feat_type == 'cls':
             pass
-        elif args.feat_type == 'student' and epoch>=3:
+        elif args.feat_type == 'o': 
+            feats = feats_ori
+        elif (args.feat_type == 'student' or args.feat_type == 's') and epoch>=3:
             feats = extract_features(dset_loaders["test"], model.encoder_q, args)
-        elif args.feat_type == 'teacher' and epoch>=3:
+        elif (args.feat_type == 'teacher' or args.feat_type == 't') and epoch>=3:
             feats = extract_features(dset_loaders["test"], model.encoder_k, args)
 
         Z = torch.zeros(len(dset_loaders['target'].dataset), args.class_num).float().numpy()  # intermediate values
@@ -139,8 +145,22 @@ def train_target(args):
             pred_probs = pred_probs / pred_probs.sum(axis=1, keepdims=True) 
 
         # ====== label propagation ======
-        W0 = None if epoch == 1 else W_ori
-        pred_labels, pred_probs, mean_acc, acc = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20, ret_acc=True, W0=W0)
+        if args.fuse_af == 1 and epoch >= 2: 
+            W0 = W_ori
+        elif args.fuse_af == 2:
+            W0 = W_pre1
+        elif args.fuse_af == 3: 
+            W0 = W_pre2
+        else: 
+            W0 = None
+        pred_labels, pred_probs, mean_acc, acc, W_new = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20, ret_acc=True, W0=W0, ret_W=True)
+        
+        if args.fuse_af == 2: 
+            W_pre1 = W_new
+        elif args.fuse_af == 3: 
+            W_pre2 = copy.deepcopy(W_pre1)
+            W_pre1 = W_new
+        
         if acc > LP_MAX_ACC: 
             LP_MAX_ACC = acc
             LP_MAX_MEAN_ACC = mean_acc
@@ -300,7 +320,7 @@ if __name__ == "__main__":
     parser.add_argument('--classifier', type=str, default="bn", choices=["ori", "bn"])
 
     parser.add_argument('--bn_adapt', action='store_true', help='Whether to first finetune mu and std in BN layers')
-    parser.add_argument('--feat_type', type=str, default='student', choices=['cls', 'teacher', 'student'])
+    parser.add_argument('--feat_type', type=str, default='cls', choices=['cls', 'teacher', 'student', 's', 't', 'o'])
 
     parser.add_argument('--loss_type', type=str, default='dot', help='Loss function for target domain adaptation', choices=['ce', 'sce', 'dot', 'dot_d'])
     parser.add_argument('--loss_wt', type=str, default='en5', help='CE/SCE loss weight: e|p|n, c|n, 0-9')
@@ -327,11 +347,15 @@ if __name__ == "__main__":
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')
     parser.add_argument('--k', type=int, default=3, help='number of neighbors for label propagation')
-    parser.add_argument('--kk', type=int, default=10, help='number of neighbors for label propagation')
+    parser.add_argument('--kk', type=int, default=3, help='number of neighbors for label propagation')
     parser.add_argument('--dk', action='store_true', default=False, help='decay k')
+    parser.add_argument('--fuse_af', type=int, default=0, help='fuse affinity')
+    parser.add_argument('--fuse_type', type=str, default='c', help='how to fuse affinity')  # c|m
+    
 
     parser.add_argument('--output', type=str, default='result/')
     parser.add_argument('--exp_name', type=str, default='moco_nce5_pn5_k3')
+    parser.add_argument('--debug', action='store_true', default=False)
     args = parser.parse_args()
 
     if args.data_aug != 'null':
@@ -340,6 +364,8 @@ if __name__ == "__main__":
         args.data_aug = None
     if args.loss_type == 'dot' or args.loss_type == 'dot_d':
         args.plabel_soft = True
+    if (args.fuse_af > 0) and (args.k <= args.kk): 
+        args.k = args.kk*3
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
     SEED = args.seed

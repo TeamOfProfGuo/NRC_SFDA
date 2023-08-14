@@ -11,7 +11,7 @@ class MoCo(nn.Module):
     https://arxiv.org/abs/1911.05722
     """
 
-    def __init__(self, netF, netB, netC, dim=128, K=65536, m=0.999, T=0.07, mlp=False):
+    def __init__(self, netF, netB, netC, dim=128, K=65536, m=0.999, T=0.07, mlp=False, bn=0):
         """
         dim: feature dimension (default: 128)
         K: queue size; number of negative keys (default: 65536)
@@ -35,9 +35,17 @@ class MoCo(nn.Module):
         # create the encoders
         if mlp:
             dim_mlp = netF.in_features
-            self.projection_layer = nn.Sequential(nn.Linear(dim_mlp, dim_mlp),
-                                                  nn.ReLU(),
-                                                  nn.Linear(dim_mlp, dim))
+            if bn == 0:
+                self.projection_layer = nn.Sequential(nn.Linear(dim_mlp, dim_mlp),
+                                                    nn.ReLU(),
+                                                    nn.Linear(dim_mlp, dim))
+            elif bn == 1: 
+                self.projection_layer = nn.Sequential(nn.Linear(dim_mlp, dim_mlp),
+                                                    nn.ReLU(),
+                                                    nn.Linear(dim_mlp, dim), 
+                                                    nn.BatchNorm1d(dim, affine=True)
+                                                    )
+                
         else:
             self.projection_layer = nn.Identity()
         self.encoder_q = nn.Sequential(self.netF, self.projection_layer)
