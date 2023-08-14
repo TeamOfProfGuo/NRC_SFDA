@@ -115,7 +115,7 @@ def train_target(args):
         pred_labels, feats, labels, pred_probs = extract_feature_labels(dset_loaders["test"],
                                                                         model.netF, model.netB, model.netC,
                                                                         args, log, epoch)
-        if epoch==1 and (args.fuse_af>=1 or args.feat_type=='o'): 
+        if epoch==1 and (args.fuse_af>=0 or args.feat_type=='o'): 
             feats_ori = copy.deepcopy(feats)
             W_ori = get_affinity(feats_ori, args)
 
@@ -151,24 +151,23 @@ def train_target(args):
         elif args.fuse_af >= 1: 
             if epoch == 0: 
                 W0 = None
-            elif (epoch >= 1) and (epoch <= args.fuse_af): 
+            elif (epoch >= 1) and (epoch <= args.fuse_af + 1): 
                 W0 = W_ori
             else: 
-                fname = osp.join(args.output_dir, 'w{}.pickle'.format(epoch - args.fuse_af))
-                with open(fname, 'rb') as f:
-                    W0 = pickle.load(f)
-                log('load W0 from {}'.format(fname))
+                if (epoch - args.fuse_af)%2 == 0: 
+                    fname = osp.join(args.output_dir, 'w{}.pickle'.format(epoch - args.fuse_af + 1))
+                    with open(fname, 'rb') as f:
+                        W0 = pickle.load(f)
+                    log('load W0 from {}'.format(fname))
+                else: 
+                    log('Use W0 from previous epoch')
          
         pred_labels, pred_probs, mean_acc, acc, W_new = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20, ret_acc=True, W0=W0, ret_W=True)
-        fname = osp.join(args.output_dir, 'w{}.pickle'.format(epoch))
-        with open(fname, 'wb') as f:
-            pickle.dump(W_new, f)
-        
-        if args.fuse_af == 2: 
-            W_pre1 = W_new
-        elif args.fuse_af == 3: 
-            W_pre2 = copy.deepcopy(W_pre1)
-            W_pre1 = W_new
+        if args.fuse_af >=0 : 
+            if epoch % 2 == 1: 
+                fname = osp.join(args.output_dir, 'w{}.pickle'.format(epoch))
+                with open(fname, 'wb') as f:
+                    pickle.dump(W_new, f)
         
         if acc > LP_MAX_ACC: 
             LP_MAX_ACC = acc
@@ -333,7 +332,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--loss_type', type=str, default='dot', help='Loss function for target domain adaptation', choices=['ce', 'sce', 'dot', 'dot_d'])
     parser.add_argument('--loss_wt', type=str, default='en5', help='CE/SCE loss weight: e|p|n, c|n, 0-9')
-    parser.add_argument('--plabel_soft', action='store_false', help='Whether to use soft/hard pseudo label')   #
+    parser.add_argument('--plabel_soft', action='store_false', default=True, help='Whether to use soft/hard pseudo label')   #
     parser.add_argument('--data_aug', type=str, default='null', help='delimited list input')             # 0.2,0.5
     parser.add_argument('--data_trans', type=str, default='moco')
 
