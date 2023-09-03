@@ -222,7 +222,6 @@ def get_RandAug(args):
         ])
     )
 
-
 def mr_transform(min_scales=None):
     num_ops, magnitude = 2, 9
     return TwoCropsTransform(
