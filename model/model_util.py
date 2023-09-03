@@ -3,6 +3,7 @@ import pdb
 import copy
 import numpy as np
 import scipy
+from scipy import sparse
 import scipy.stats
 import faiss
 from faiss import normalize_L2
@@ -273,7 +274,7 @@ def keep_top_n(matrix, n):
     return matrix
 
 # Acc for W0, W1, and W
-def get_af_acc(WW, label, args):
+def get_af_wt_acc(WW, label, args,):
     N = len(label)
     acc_list = []
     for i in range(N):
@@ -282,14 +283,40 @@ def get_af_acc(WW, label, args):
         idx = (np.where(WW.data[le:ri]>0))[0] # idx for WW.indices 
         index = WW.indices[le: ri][idx]       # idx for nearest neighbors
         nn_label = label[index]
-        acc_i = (nn_label == gt_label).sum()/len(nn_label)
+        wt = WW.data[le:ri][idx]              # similarity between target and NN
+        acc_i = ((nn_label == gt_label) * wt).sum()/np.sum(wt)
+            
         acc_list.append(acc_i)
     acc = np.mean(np.array(acc_list))
     return acc
 
 
-def combine_W(W1, W0, min_decay=0.5): 
+# Acc for W0, W1, and W
+def get_af_acc(WW, label, args, pred_label=None):
+    N = len(label)
+    acc_list = []
+    for i in range(N):
+        gt_label = label[i]
+        le, ri = i*args.k, (i+1)*args.k  # le, ri = WW.indptr[i], WW.indptr[i+1]
+        idx = (np.where(WW.data[le:ri]>0))[0] # idx for WW.indices 
+        index = WW.indices[le: ri][idx]       # idx for nearest neighbors
+        nn_label = label[index]
+        
+        if pred_label is not None: 
+            nn_plabel = pred_label[index]
+            acc_i = ((nn_label == gt_label)*(nn_plabel == gt_label)).sum()/len(nn_label)
+        else: 
+            acc_i = (nn_label == gt_label).sum()/len(nn_label)
+            
+        acc_list.append(acc_i)
+    acc = np.mean(np.array(acc_list))
+    return acc
+
+
+def combine_W(W1, W0, min_decay=0.5, ret_match_rate=False): 
     W = copy.deepcopy(W1)
+    N = W0.shape[0]
+    match0, match1, match2, match3 = 0, 0, 0, 0
     for i in range(W0.shape[0]):    # to define the multiplier of W1
         le, ri = W0.indptr[i], W0.indptr[i+1] 
         row_idx0 = W0.indices[le:ri] # idx of NN 
@@ -303,9 +330,37 @@ def combine_W(W1, W0, min_decay=0.5):
         new_dt1 = np.concatenate(match_v)
         
         W.data[le:ri] = new_dt1 # * (1/np.max(new_dt1))
+        
+        # count percentage of W0 and W1 top3 overlap 
+        match_flags = [1 if len(i)>0 else 0 for i in match_idx] # for each NN in W1, whether it's also NN in W0 
+        if sum(match_flags) >= 3: 
+            match3 += 1 
+        if sum(match_flags) >= 2: 
+            match2 += 1 
+        if sum(match_flags) >= 1: 
+            match1 += 1 
     
     W = W.multiply(W1)
-    return W*5
+    
+    if ret_match_rate: 
+        return W*5, match3/N, match2/N, match1/N
+    else:
+        return W*5
+
+
+def local_cluster(pred_prob, W, label, log): 
+    """pred_prob: raw pseudo label
+       W: to identify k-NN (sparse matrix)
+    """
+    # average of K-NN 
+    new_data = (W.data > 0).astype(np.float32)
+    W.data = new_data
+    new_pred_probs = sparse.csr_matrix.dot(W, pred_prob)  # [N, N] [N, C] -> [N, C]
+    new_pred = np.argmax(new_pred_probs, 1)
+    new_acc = float(np.sum(new_pred == label)) / len(label)
+    mean_acc, _ = compute_acc(label, new_pred)
+    log('>>>>>>> After local cluster Acc: {:.2f}%, Mean Acc: {:.2f}%'.format(new_acc*100, mean_acc*100))
+    return new_pred
 
 
 def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20, ret_acc=False, W0=None, ret_W=False):
@@ -329,7 +384,11 @@ def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20
         if args.fuse_type == 'c':
             W = W1.copy() .multiply( ((W0 > 0)*0.5 + (W1 > 0)*0.5) ) # also nearest neighbor in W0
         elif args.fuse_type == 'm':
-            W = combine_W(W1, W0)
+            if args.debug: 
+                W, m3, m2, m1 = combine_W(W1, W0, ret_match_rate=True)
+                log('----Match rate between W1 and W0: M3:{:.4f}, M2:{:.4f}, M1:{:.4f}'.format(m3, m2, m1))
+            else: 
+                W = combine_W(W1, W0)
         W = keep_top_n(W, args.kk)
     else:
         W = keep_top_n(W1, args.kk)
@@ -340,8 +399,17 @@ def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20
         W11 = keep_top_n(W11, args.kk) 
         acc0 = get_af_acc(W00, label, args)
         acc1 = get_af_acc(W11, label, args)
-        acc  = get_af_acc(W,   label, args)
-        log('>>>>>>> acc0: {:.4f}, acc1: {:.4f}, acc: {:.4f}'.format(acc0, acc1, acc))
+        acc  = get_af_acc(W,   label, args) 
+        
+        wt_acc1 = get_af_wt_acc(W11, label, args)
+        wt_acc  = get_af_wt_acc(W,   label, args)
+        
+        # pred_label_h =  np.argmax(pred_prob, axis=1) # predicted hard label
+        # acc1_g = get_af_acc(W11, label, args, pred_label_h)
+        # acc_g  = get_af_acc(W,   label, args, pred_label_h)
+        
+        log('>>>>>>> acc0: {:.4f}, acc1: {:.4f}, acc: {:.4f}, wt_acc1: {:.4f}, wt_acc: {:.4f}'.format(
+            acc0, acc1, acc, wt_acc1, wt_acc))
 
     W = W + W.T
 

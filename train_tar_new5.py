@@ -16,7 +16,7 @@ from dataset.data_list import ImageList
 from dataset.visda_data import data_load, image_train, moco_transform, mm_transform, mn_transform, mr_transform
 from model.model_util import bn_adapt, bn_adapt1, label_propagation, extract_feature_labels, extract_features, get_affinity
 from model.loss import compute_loss
-from dataset.data_transform import TransformSW
+from dataset.data_transform import TransformSW, TransformBase
 from utils import cal_acc, print_args, log, set_log_path
 mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
 
@@ -30,6 +30,8 @@ def reset_data_load(dset_loaders, pred_prob, args, moco_load=False):
         data_trans = moco_transform(min_scales=args.data_aug)
     elif args.data_trans == 'sw':
         data_trans = TransformSW(mean, std)
+    elif args.data_trans == 'bs': 
+        data_trans = TransformBase()
     elif args.data_trans == 'mm':
         data_trans = mm_transform(min_scales=args.data_aug)
     elif args.data_trans == 'mn':
@@ -277,7 +279,7 @@ if __name__ == "__main__":
     
 
     parser.add_argument('--lp_type', type=float, default=0, help="Label propagation use hard label or soft label, 0:hard label, >0: temperature")
-    parser.add_argument('--T_decay', type=float, default=1.0, help='Temperature decay of creating pseudo-label in feature extraction')
+    parser.add_argument('--T_decay', type=float, default=0.0, help='Temperature decay of creating pseudo-label in feature extraction')
     parser.add_argument('--feat_type', type=str, default='cls', choices=['cls', 'teacher', 'student', 't', 's', 'o'])
     parser.add_argument('--nce_wt', type=float, default=1.0, help='weight for nce loss')
     parser.add_argument('--nce_wt_decay', type=float, default=0.0, help='0.0:no decay, larger value faster decay')
@@ -297,7 +299,7 @@ if __name__ == "__main__":
     parser.add_argument('--distance', type=str, default='cosine', choices=['cosine', 'euclidean'])
     parser.add_argument('--threshold', type=int, default=10, help='threshold for filtering cluster centroid')
     parser.add_argument('--k', type=int, default=5, help='number of neighbors for label propagation')
-    parser.add_argument('--kk', type=int, default=3, help='number of neighbors for label propagation')
+    parser.add_argument('--kk', type=int, default=5, help='number of neighbors for label propagation')
     parser.add_argument('--fuse_af', type=int, default=0, help='fuse affinity')
     parser.add_argument('--fuse_type', type=str, default='c', help='how to fuse affinity')  # c|m
 

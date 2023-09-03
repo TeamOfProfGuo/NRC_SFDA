@@ -16,6 +16,7 @@ from model import moco, network
 from model.loss import compute_loss
 from torch.utils.data import DataLoader
 from dataset.data_list import ImageList
+from dataset.data_transform import TransformSW, TransformBase
 from dataset.oh_data import office_load, moco_transform, image_target, mn_transform, mw_transform, get_RandAug, get_AutoAug, mr_transform
 from model.model_util import bn_adapt, label_propagation, extract_feature_labels, extract_features, normalize, get_affinity
 
@@ -42,6 +43,8 @@ def reset_data_load(dset_loaders, pred_prob, args, ss_load=None):
         data_trans = get_AutoAug(args)
     elif args.data_trans == 'ra':
         data_trans = get_RandAug(args)
+    elif args.data_trans == 'bs':
+        data_trans = TransformBase()
     elif args.data_trans == 'mw':
         data_trans = mw_transform()
     elif args.data_trans == 'mr':
@@ -94,7 +97,7 @@ def train_target(args):
     model = moco.MoCo(netF, netB, netC, dim=128, K=4096, m=0.999, T=0.07, mlp=True)
     model = model.cuda()
 
-    param_group = [{'params': model.netF.parameters(), 'lr': args.lr * 0.1},
+    param_group = [{'params': model.netF.parameters(), 'lr': args.lr * args.lr_scale},
                    {'params': model.netB.parameters(), 'lr': args.lr * 1},
                    {'params': model.netC.parameters(), 'lr': args.lr * 1},
                    {'params': model.projection_layer.parameters(), 'lr': args.lr * 1}]
@@ -319,6 +322,7 @@ if __name__ == "__main__":
     parser.add_argument('--worker', type=int, default=2, help="number of workers")
     parser.add_argument('--dset', type=str, default='a2r')
     parser.add_argument('--lr', type=float, default=0.01, help="learning rate")
+    parser.add_argument('--lr_scale', type=float, default=0.1, help="learning rate scale")
     parser.add_argument('--seed', type=int, default=2021, help="random seed")
     
     parser.add_argument('--net', type=str, default='resnet50', help="resnet50, resnet101")
@@ -331,7 +335,7 @@ if __name__ == "__main__":
     parser.add_argument('--feat_type', type=str, default='cls', choices=['cls', 'teacher', 'student', 's', 't', 'o'])
 
     parser.add_argument('--loss_type', type=str, default='dot', help='Loss function for target domain adaptation', choices=['ce', 'sce', 'dot', 'dot_d'])
-    parser.add_argument('--loss_wt', type=str, default='en5', help='CE/SCE loss weight: e|p|n, c|n, 0-9')
+    parser.add_argument('--loss_wt', type=str, default='en5', help='CE/SCE loss weight: e|f|p|n, c|n, 0-9')
     parser.add_argument('--plabel_soft', action='store_false', default=True, help='Whether to use soft/hard pseudo label')   #
     parser.add_argument('--data_aug', type=str, default='null', help='delimited list input')             # 0.2,0.5
     parser.add_argument('--data_trans', type=str, default='moco')

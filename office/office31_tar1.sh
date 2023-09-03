@@ -21,14 +21,14 @@ singularity exec --nv \
 --overlay ${ext3_path}:ro \
 ${sif_path} /bin/bash -c "
 source /ext3/env.sh
-python -m office.office31_tar --dset a2d --loss_type sce --loss_wt en5 --div_wt 0.05 --data_trans mn --data_aug 0.2,0.5 --lp_type 0.5 --fuse_af 10 --fuse_type m --debug --exp_name unim_sces_en5_mn2_lp05_div005_af10m
-python -m office.office31_tar --dset a2w --loss_type sce --loss_wt en5 --div_wt 0.05 --data_trans mn --data_aug 0.2,0.5 --lp_type 0.5 --fuse_af 10 --fuse_type m --debug --exp_name unim_sces_en5_mn2_lp05_div005_af10m
+python -m office.office31_tar --dset a2d --loss_type sce --loss_wt en5 --div_wt 0.0 --data_trans mn --data_aug 0.2,0.5 --lp_type 0.5 --fuse_af 10 --fuse_type m --debug --lr_scale 0.5 --exp_name unim_sces_en5_mn2_lp05_div00_af10m_lrs5
+python -m office.office31_tar --dset a2w --loss_type sce --loss_wt en5 --div_wt 0.0 --data_trans mn --data_aug 0.2,0.5 --lp_type 0.5 --fuse_af 10 --fuse_type m --debug --lr_scale 0.5 --exp_name unim_sces_en5_mn2_lp05_div00_af10m_lrs5
 
-python -m office.office31_tar --dset d2a --loss_type sce --loss_wt en5 --div_wt 0.05 --data_trans mn --data_aug 0.2,0.5 --lp_type 0.5 --fuse_af 10 --fuse_type m --debug --exp_name unim_sces_en5_mn2_lp05_div005_af10m
-python -m office.office31_tar --dset d2w --loss_type sce --loss_wt en5 --div_wt 0.05 --data_trans mn --data_aug 0.2,0.5 --lp_type 0.5 --fuse_af 10 --fuse_type m --debug --exp_name unim_sces_en5_mn2_lp05_div005_af10m
+python -m office.office31_tar --dset d2a --loss_type sce --loss_wt en5 --div_wt 0.0 --data_trans mn --data_aug 0.2,0.5 --lp_type 0.5 --fuse_af 10 --fuse_type m --debug --lr_scale 0.5 --exp_name unim_sces_en5_mn2_lp05_div00_af10m_lrs5
+python -m office.office31_tar --dset d2w --loss_type sce --loss_wt en5 --div_wt 0.0 --data_trans mn --data_aug 0.2,0.5 --lp_type 0.5 --fuse_af 10 --fuse_type m --debug --lr_scale 0.5 --exp_name unim_sces_en5_mn2_lp05_div00_af10m_lrs5
 
-python -m office.office31_tar --dset w2a --loss_type sce --loss_wt en5 --div_wt 0.05 --data_trans mn --data_aug 0.2,0.5 --lp_type 0.5 --fuse_af 10 --fuse_type m --debug --exp_name unim_sces_en5_mn2_lp05_div005_af10m
-python -m office.office31_tar --dset w2d --loss_type sce --loss_wt en5 --div_wt 0.05 --data_trans mn --data_aug 0.2,0.5 --lp_type 0.5 --fuse_af 10 --fuse_type m --debug --exp_name unim_sces_en5_mn2_lp05_div005_af10m
+python -m office.office31_tar --dset w2a --loss_type sce --loss_wt en5 --div_wt 0.0 --data_trans mn --data_aug 0.2,0.5 --lp_type 0.5 --fuse_af 10 --fuse_type m --debug --lr_scale 0.5 --exp_name unim_sces_en5_mn2_lp05_div00_af10m_lrs5
+python -m office.office31_tar --dset w2d --loss_type sce --loss_wt en5 --div_wt 0.0 --data_trans mn --data_aug 0.2,0.5 --lp_type 0.5 --fuse_af 10 --fuse_type m --debug --lr_scale 0.5 --exp_name unim_sces_en5_mn2_lp05_div00_af10m_lrs5
 "
 #  --plabel_soft
 

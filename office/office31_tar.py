@@ -85,7 +85,7 @@ def train_target(args):
     model = moco.UniModel(netF, netB, netC)
     model = model.cuda()
 
-    param_group = [{'params': model.netF.parameters(), 'lr': args.lr * 0.5},
+    param_group = [{'params': model.netF.parameters(), 'lr': args.lr * args.lr_scale},
                    {'params': model.netB.parameters(), 'lr': args.lr * 1},
                    {'params': model.netC.parameters(), 'lr': args.lr * 1},]
 
@@ -260,6 +260,7 @@ if __name__ == "__main__":
     parser.add_argument("--dset", type=str, default="a2d")
     parser.add_argument("--office31", action="store_false", default=True)
     parser.add_argument("--lr", type=float, default=0.01, help="learning rate")
+    parser.add_argument('--lr_scale', type=float, default=0.1, help="learning rate scale")
     parser.add_argument("--seed", type=int, default=2021, help="random seed")
 
     parser.add_argument('--net', type=str, default='resnet50', help="resnet50, resnet101")

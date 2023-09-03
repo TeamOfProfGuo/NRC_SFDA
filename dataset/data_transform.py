@@ -6,6 +6,10 @@ from PIL import Image, ImageFilter, ImageOps
 
 from .randaugment import RandAugmentMC
 
+normalize = transforms.Normalize(
+        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+    )
+
 
 class TwoCropsTransform:
     """Take two random crops of one image as the query and key."""
@@ -50,6 +54,28 @@ class Solarization(object):
         else:
             return img
 
+
+class TransformBase(object):
+    def __init__(self, resize=256, crop_size=224):
+        self.weak = transforms.Compose([
+            transforms.Resize((resize, resize)),
+            transforms.RandomCrop(crop_size),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(), normalize
+            ])
+
+        self.strong = transforms.Compose([
+            transforms.Resize((resize, resize)),
+            transforms.RandomCrop(crop_size),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(), normalize
+            ])
+
+    def __call__(self, x):
+        weak = self.weak(x)
+        strong = self.strong(x)
+        return weak, strong
+    
 
 class TransformSW(object):
     def __init__(self, mean, std, resize=256, crop_size=224):

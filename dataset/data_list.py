@@ -43,7 +43,10 @@ class ImageList(Dataset):
 
         if pprob is not None and args is not None:
             entropy = scipy.stats.entropy(pprob, axis=1)
-            weights = 1 - entropy / np.log(args.class_num)
+            if args.loss_wt[0] == 'f':
+                weights = np.exp( -entropy / np.log(args.class_num) )
+            else:
+                weights = 1 - entropy / np.log(args.class_num)
             self.weights = weights / np.max(weights)
             self.plabel = pprob # np.argmax(pprob, 1)
 
