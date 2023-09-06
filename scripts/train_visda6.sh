@@ -20,5 +20,5 @@ singularity exec --nv \
 --overlay ${ext3_path}:ro \
 ${sif_path} /bin/bash -c "
 source /ext3/env.sh
-python train_tar_new6.py --loss_type dot --loss_wt en5 --data_trans mn --data_aug 0.2,0.5 --bn_adapt 0 --lp_type 0.5 --fuse_af 10 --fuse_type m --debug --exp_name unim_en5_dot_mn2_lp05_af10m_check
+python train_tar_new6.py --loss_wt en5 --data_trans mn --data_aug 0.2,0.5 --lp_type 0.5 --fuse_af 11 --fuse_type m --exp_name unim_mn2_en5_lp05_af11m_1
 "

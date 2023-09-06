@@ -213,7 +213,7 @@ def finetune_one_epoch(model, dset_loaders, optimizer, epoch=None):
         logit_tar1 = model(img_tar[1])
         prob_tar1 = nn.Softmax(dim=1)(logit_tar1)  # [B, K]
 
-        if args.loss_wt[0] == 'e':  # entropy weight
+        if args.loss_wt[0] == 'e' or args.loss_wt[0] == 'f':  # entropy weight
             pass
         elif args.loss_wt[0] == 'p':
             prob_dist = torch.abs(prob_tar1.detach() - prob_tar0.detach()).sum(dim=1) # [B]
@@ -317,7 +317,7 @@ if __name__ == "__main__":
     parser.add_argument('--fuse_af', type=int, default=0, help='fuse affinity')
     parser.add_argument('--fuse_type', type=str, default='c', help='how to fuse affinity')  # c|m
 
-    parser.add_argument('--output', type=str, default='result/')
+    parser.add_argument('--output', type=str, default='result9/')
     parser.add_argument('--exp_name', type=str, default='unim_en5_dot')
     parser.add_argument('--data_trans', type=str, default='moco')
     parser.add_argument('--debug', action='store_true', default=False)
@@ -357,7 +357,7 @@ if __name__ == "__main__":
         args.t_dset_path = folder + args.dset + '/' + names[args.t] + '/image_list.txt'
         args.test_dset_path = folder + args.dset + '/' + names[args.t] + '/image_list.txt'
 
-        args.output_dir_src = osp.join(args.output, args.dset, 'source', names[args.s][0].upper())
+        args.output_dir_src = osp.join('result/', args.dset, 'source', names[args.s][0].upper())
         args.output_dir = osp.join(args.output, args.dset, args.exp_name, names[args.s][0].upper() + names[args.t][0].upper())
         args.name = names[args.s][0].upper() + names[args.t][0].upper()
 
