@@ -5,3 +5,7 @@ result
 *.out
 weight
 *.txt
+*.pickle
+*.npy
+*.npz
+*.pt

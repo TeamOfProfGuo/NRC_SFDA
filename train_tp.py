@@ -1,19 +1,9 @@
 import argparse
-import os, sys
 import os.path as osp
-import torchvision
-import numpy as np
-import torch
-import torch.nn as nn
 import torch.optim as optim
-from torchvision import transforms
-import network, loss
-from torch.utils.data import DataLoader
-from data_list import ImageList
-import random, pdb, math, copy
-from loss import CrossEntropyLabelSmooth
-from sklearn.metrics import confusion_matrix
-from train_src import cal_acc, data_load
+from model import network
+import random
+from train_src import data_load
 from utils import *
 #========================================================================================
 parser = argparse.ArgumentParser(description='Neighbors')
@@ -60,7 +50,7 @@ if not osp.exists(args.output_dir_src):
 if not osp.exists(args.output_dir_src):
     os.mkdir(args.output_dir_src)
 
-#=========================================
+#============ TRAIN MODEL ON SOURCE DOMAIN
 dset_loaders = data_load(args)    # ['source_tr', 'source_te', 'test']
 
 ## set base network
