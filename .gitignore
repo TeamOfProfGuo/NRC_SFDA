@@ -9,3 +9,5 @@ weight
 *.npy
 *.npz
 *.pt
+result9
+result9/

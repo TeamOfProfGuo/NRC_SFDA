@@ -110,42 +110,22 @@ def analysis_target(args):
             z = Z * (1. / (1. - args.lp_ma ** epoch))
             pred_probs_raw = z
 
-        # ============ label propagation ============
-        if args.fuse_af < 0:
-            W0 = None
-        elif args.fuse_af == 0:
-            W0 = W_ori if epoch >= 2 else None
-        elif args.fuse_af >= 1:
-            if epoch <= 1:
-                W0 = None
-            elif (epoch > 1) and (epoch <= args.fuse_af + 1):  # fisrt epoch no fuse 
-                W0 = W_ori
-            else: 
-                fname = osp.join(args.output_dir, 'w{}.pickle'.format(epoch - args.fuse_af))
-                with open(fname, 'rb') as f:
-                    W0 = pickle.load(f)
-                log('load W0 from {}'.format(fname))
+        # ============ kNN ============
 
-        pred_labels, pred_probs, mean_acc, acc, W_new = label_propagation(pred_probs_raw, feats, labels, args, log,
-                                                                          alpha=0.99, max_iter=20, ret_acc=True, W0=W0,
-                                                                          ret_W=True)
-        if args.debug:  # for ablation analysis
-            # W_new_k = keep_top_n(W_new, args.kk)
-            # _ = local_cluster(pred_probs_raw, W_new_k, labels, log)
+        # kNN search for the graph
+        W = get_affinity(feats, args.kk)
+        pred_probs = local_cluster(pred_probs_raw, W, labels, log)
+
+        if args.debug:
             
-            fname1 = osp.join(args.output_dir, 'pred_prob_ep{}.pickle'.format(epoch))
+            fname1 = osp.join(args.output_dir, 'pred_prob_ep{}.pickle'.format(epoch))   # prediction from kNN
             with open(fname1, 'wb') as f: 
                 pickle.dump(pred_probs,f)
             
             if epoch == 1:
-                fname2 = osp.join(args.output_dir, 'label_ep{}.pickle'.format(epoch))
+                fname2 = osp.join(args.output_dir, 'label_ep{}.pickle'.format(epoch))  # model ground truth
                 with open(fname2, 'wb') as f: 
                     pickle.dump(labels,f)
-        
-        if args.fuse_af > 0:
-            fname = osp.join(args.output_dir, 'w{}.pickle'.format(epoch))
-            with open(fname, 'wb') as f:
-                pickle.dump(W_new, f)
 
         if mean_acc > LP_MAX_MEAN_ACC:
             LP_MAX_ACC = acc

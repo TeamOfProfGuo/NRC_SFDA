@@ -359,12 +359,18 @@ def local_cluster(pred_prob, W, label, log):
     # average of K-NN 
     new_data = (W.data > 0).astype(np.float32)
     W.data = new_data
-    new_pred_probs = sparse.csr_matrix.dot(W, pred_prob)  # [N, N] [N, C] -> [N, C]
-    new_pred = np.argmax(new_pred_probs, 1)
-    new_acc = float(np.sum(new_pred == label)) / len(label)
-    mean_acc, _ = compute_acc(label, new_pred)
-    log('>>>>>>> After local cluster Acc: {:.2f}%, Mean Acc: {:.2f}%'.format(new_acc*100, mean_acc*100))
-    return new_pred
+    new_pred_prob = sparse.csr_matrix.dot(W, pred_prob)  # [N, N] [N, C] -> [N, C]
+
+    pred = pred_prob.argmax(1)
+    acc = float(np.sum(pred == label)) / (len(label) + 1e-18)
+    mean_acc, _ = compute_acc(label, pred)
+
+    new_pred = np.argmax(new_pred_prob, 1)
+    new_acc = float(np.sum(new_pred == label)) / (len(label) + 1e-18)
+    new_mean_acc, _ = compute_acc(label, new_pred)
+    log('>>>>>>> Before Local Cluster (LS) Acc: {:.2f}%, Mean Acc: {:.2f}%,  After Acc: {:.2f}%, Mean Acc: {:.2f}%'.format(
+        acc*100, mean_acc*100, new_acc*100, new_mean_acc*100))
+    return new_pred_prob
 
 
 def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20, ret_acc=False, W0=None, ret_W=False):
