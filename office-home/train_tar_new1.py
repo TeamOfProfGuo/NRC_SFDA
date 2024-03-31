@@ -152,25 +152,31 @@ def train_target(args):
         elif args.fuse_af == 0: 
             W0 = W_ori if epoch >= 2 else None
         elif args.fuse_af >= 1: 
-            if epoch == 0: 
+            if epoch <= 1: 
                 W0 = None
-            elif (epoch >= 1) and (epoch <= args.fuse_af + 1): 
+            elif (epoch > 1) and (epoch <= args.fuse_af + 1): 
                 W0 = W_ori
             else: 
-                if (epoch - args.fuse_af)%2 == 0: 
-                    fname = osp.join(args.output_dir, 'w{}.pickle'.format(epoch - args.fuse_af + 1))
-                    with open(fname, 'rb') as f:
-                        W0 = pickle.load(f)
-                    log('load W0 from {}'.format(fname))
-                else: 
-                    log('Use W0 from previous epoch')
+                fname = osp.join(args.output_dir, 'w{}.pickle'.format(epoch - args.fuse_af))
+                with open(fname, 'rb') as f:
+                    W0 = pickle.load(f)
+                log('load W0 from {}'.format(fname))
          
         pred_labels, pred_probs, mean_acc, acc, W_new = label_propagation(pred_probs, feats, labels, args, log, alpha=0.99, max_iter=20, ret_acc=True, W0=W0, ret_W=True)
-        if args.fuse_af >=0 : 
-            if epoch % 2 == 1: 
-                fname = osp.join(args.output_dir, 'w{}.pickle'.format(epoch))
-                with open(fname, 'wb') as f:
-                    pickle.dump(W_new, f)
+        if args.fuse_af >=1 : 
+            fname = osp.join(args.output_dir, 'w{}.pickle'.format(epoch))
+            with open(fname, 'wb') as f:
+                pickle.dump(W_new, f)
+        
+        if args.debug:   
+            fname1 = osp.join(args.output_dir, 'pred_prob_ep{}.pickle'.format(epoch))
+            with open(fname1, 'wb') as f: 
+                pickle.dump(pred_probs,f)
+            
+            if epoch == 1:
+                fname2 = osp.join(args.output_dir, 'label_ep{}.pickle'.format(epoch))
+                with open(fname2, 'wb') as f: 
+                    pickle.dump(labels,f)
         
         if acc > LP_MAX_ACC: 
             LP_MAX_ACC = acc
@@ -362,10 +368,10 @@ if __name__ == "__main__":
     parser.add_argument('--kk', type=int, default=3, help='number of neighbors for label propagation')
     parser.add_argument('--dk', action='store_true', default=False, help='decay k')
     parser.add_argument('--fuse_af', type=int, default=0, help='fuse affinity')
-    parser.add_argument('--fuse_type', type=str, default='c', help='how to fuse affinity')  # c|m
+    parser.add_argument('--fuse_type', type=str, default='c', help='how to fuse affinity')  # c|m|a  
     
 
-    parser.add_argument('--output', type=str, default='result/')
+    parser.add_argument('--output', type=str, default='result9/')
     parser.add_argument('--exp_name', type=str, default='moco_nce5_pn5_k3')
     parser.add_argument('--debug', action='store_true', default=False)
     args = parser.parse_args()

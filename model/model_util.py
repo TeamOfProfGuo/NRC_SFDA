@@ -284,7 +284,7 @@ def get_af_wt_acc(WW, label, args,):
         index = WW.indices[le: ri][idx]       # idx for nearest neighbors
         nn_label = label[index]
         wt = WW.data[le:ri][idx]              # similarity between target and NN
-        acc_i = ((nn_label == gt_label) * wt).sum()/np.sum(wt)
+        acc_i = ((nn_label == gt_label) * wt).sum()/(np.sum(wt) + 1e-8)
             
         acc_list.append(acc_i)
     acc = np.mean(np.array(acc_list))
@@ -304,16 +304,16 @@ def get_af_acc(WW, label, args, pred_label=None):
         
         if pred_label is not None: 
             nn_plabel = pred_label[index]
-            acc_i = ((nn_label == gt_label)*(nn_plabel == gt_label)).sum()/len(nn_label)
+            acc_i = ((nn_label == gt_label)*(nn_plabel == gt_label)).sum()/(len(nn_label) + 1e-8)
         else: 
-            acc_i = (nn_label == gt_label).sum()/len(nn_label)
+            acc_i = (nn_label == gt_label).sum()/(len(nn_label) + 1e-8)
             
         acc_list.append(acc_i)
     acc = np.mean(np.array(acc_list))
     return acc
 
 
-def combine_W(W1, W0, min_decay=0.5, ret_match_rate=False): 
+def combine_W(W1, W0, min_decay=0.5, ret_match_rate=False, fuse_type='m'): 
     W = copy.deepcopy(W1)
     N = W0.shape[0]
     match0, match1, match2, match3 = 0, 0, 0, 0
@@ -340,12 +340,16 @@ def combine_W(W1, W0, min_decay=0.5, ret_match_rate=False):
         if sum(match_flags) >= 1: 
             match1 += 1 
     
-    W = W.multiply(W1)
+    if fuse_type == 'm': 
+        W = W.multiply(W1)
+        out_W = W*5
+    elif fuse_type == 'a': 
+        out_W = W + W1 
     
     if ret_match_rate: 
-        return W*5, match3/N, match2/N, match1/N
+        return out_W, match3/N, match2/N, match1/N
     else:
-        return W*5
+        return out_W
 
 
 def local_cluster(pred_prob, W, label, log): 
@@ -383,9 +387,9 @@ def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20
     if W0 is not None:
         if args.fuse_type == 'c':
             W = W1.copy() .multiply( ((W0 > 0)*0.5 + (W1 > 0)*0.5) ) # also nearest neighbor in W0
-        elif args.fuse_type == 'm':
+        elif args.fuse_type == 'm' or args.fuse_type == 'a':
             if args.debug: 
-                W, m3, m2, m1 = combine_W(W1, W0, ret_match_rate=True)
+                W, m3, m2, m1 = combine_W(W1, W0, ret_match_rate=True, fuse_type= args.fuse_type)
                 log('----Match rate between W1 and W0: M3:{:.4f}, M2:{:.4f}, M1:{:.4f}'.format(m3, m2, m1))
             else: 
                 W = combine_W(W1, W0)
