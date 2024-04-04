@@ -539,3 +539,25 @@ class SubBatchNorm2d(nn.Module):
             x = x * self.weight.view((-1, 1, 1, 1))
             x = x + self.bias.view((-1, 1, 1, 1))
         return x
+
+
+def stratified_split(y, n_splits=2):
+    # Ensure y is a numpy array
+    y = np.array(y)
+    # Initialize indices for each split
+    splits = {}
+    for n_split in range(n_splits):
+        splits[n_split] = []
+
+    # Iterate over each class
+    for class_label in np.unique(y):
+        # Get indices corresponding to the current class
+        class_indices = np.where(y == class_label)[0]
+        num_class_split = len(class_indices)//n_splits
+
+        for n_split in range(n_splits):
+            start = n_split * num_class_split
+            end = n_split * num_class_split + num_class_split if n_split < n_splits-1 else None
+            splits[n_split].extend( class_indices[start: end])
+
+    return splits
