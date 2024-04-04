@@ -370,7 +370,8 @@ def local_cluster(pred_prob, W, label, log):
     new_mean_acc, _ = compute_acc(label, new_pred)
     log('>>>>>>> Before Local Cluster (LS) Acc: {:.2f}%, Mean Acc: {:.2f}%,  After Acc: {:.2f}%, Mean Acc: {:.2f}%'.format(
         acc*100, mean_acc*100, new_acc*100, new_mean_acc*100))
-    return new_pred_prob
+    
+    return new_pred_prob / (new_pred_prob.sum(axis=-1) + 1e-8)[...,None]
 
 
 def label_propagation(pred_prob, feat, label, args, log, alpha=0.99, max_iter=20, ret_acc=False, W0=None, ret_W=False):

@@ -150,7 +150,7 @@ def train_target(args):
             pred_probs = pred_probs / pred_probs.sum(axis=1, keepdims=True)
 
         # ====== knn ======
-        W = get_affinity(feats, args.kk)
+        W = get_affinity(feats, args)
         pred_probs = local_cluster(pred_probs, W, labels, log)
 
         if args.debug:
@@ -372,8 +372,7 @@ if __name__ == "__main__":
         args.data_aug = None
     if args.loss_type == 'dot' or args.loss_type == 'dot_d':
         args.plabel_soft = True
-    if (args.fuse_af >= 0) and (args.k <= args.kk):
-        args.k = args.kk * 3
+    args.k = args.kk * 3
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
     SEED = args.seed
